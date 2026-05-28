@@ -797,20 +797,20 @@ export default function App() {
                 <div className="flex justify-between items-start">
                   <div>
                     <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Receitas do Mês</p>
-                    <h3 className="text-2xl font-bold mt-2 text-slate-900 dark:text-white">
+                    <h3 className="text-2xl font-bold mt-2 text-green-600 dark:text-green-400">
                       {formatCurrency(totalReceita)}
                     </h3>
                   </div>
-                  <div className="p-3 bg-amber-100 dark:bg-amber-955/60 rounded-xl text-amber-600 dark:text-amber-400 shadow-inner">
+                  <div className="p-3 bg-green-100 dark:bg-green-900/40 rounded-xl text-green-600 dark:text-green-400 shadow-inner">
                     <TrendingUp className="h-6 w-6" />
                   </div>
                 </div>
-                <div className="mt-4 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-semibold bg-amber-500/10 px-2 py-1 rounded-md w-fit">
+                <div className="mt-4 flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400 font-semibold bg-green-500/10 px-2 py-1 rounded-md w-fit">
                   <ProfitIcon className="h-3 w-3" />
                   Entradas ativas
                 </div>
                 {/* Efeito decorativo */}
-                <div className="absolute right-0 bottom-0 h-16 w-16 bg-amber-500/5 rounded-full blur-xl translate-x-4 translate-y-4"></div>
+                <div className="absolute right-0 bottom-0 h-16 w-16 bg-green-500/5 rounded-full blur-xl translate-x-4 translate-y-4"></div>
               </div>
 
               {/* Card 2: Despesa Total */}
@@ -818,48 +818,48 @@ export default function App() {
                 <div className="flex justify-between items-start">
                   <div>
                     <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Despesas do Mês</p>
-                    <h3 className="text-2xl font-bold mt-2 text-slate-900 dark:text-white">
+                    <h3 className="text-2xl font-bold mt-2 text-red-600 dark:text-red-400">
                       {formatCurrency(totalDespesa)}
                     </h3>
                   </div>
-                  <div className="p-3 bg-pink-100 dark:bg-pink-955/60 rounded-xl text-pink-600 dark:text-pink-400 shadow-inner">
+                  <div className="p-3 bg-red-100 dark:bg-red-900/40 rounded-xl text-red-600 dark:text-red-400 shadow-inner">
                     <TrendingDown className="h-6 w-6" />
                   </div>
                 </div>
-                <div className="mt-4 flex items-center gap-1.5 text-xs text-pink-600 dark:text-pink-400 font-semibold bg-pink-500/10 px-2 py-1 rounded-md w-fit">
+                <div className="mt-4 flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400 font-semibold bg-red-500/10 px-2 py-1 rounded-md w-fit">
                   <TrendingDown className="h-3 w-3" />
                   Saídas registradas
                 </div>
                 {/* Efeito decorativo */}
-                <div className="absolute right-0 bottom-0 h-16 w-16 bg-pink-500/5 rounded-full blur-xl translate-x-4 translate-y-4"></div>
+                <div className="absolute right-0 bottom-0 h-16 w-16 bg-red-500/5 rounded-full blur-xl translate-x-4 translate-y-4"></div>
               </div>
 
               {/* Card 3: Saldo do Mês */}
               <div className={`glass-panel glass-panel-hover p-6 relative overflow-hidden border-l-4 ${saldoLiquido >= 0
-                  ? 'border-l-amber-500 bg-gradient-to-br from-pink-50 to-pink-100/40 dark:from-slate-900 dark:to-amber-955/5'
-                  : 'border-l-pink-500 bg-gradient-to-br from-pink-50 to-pink-200/30 dark:from-slate-900 dark:to-pink-955/5'
+                  ? 'border-l-green-500'
+                  : 'border-l-red-500'
                 }`}>
                 <div className="flex justify-between items-start">
                   <div>
                     <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Saldo Líquido</p>
                     <h3 className={`text-2xl font-bold mt-2 ${saldoLiquido >= 0
-                        ? 'text-amber-600 dark:text-amber-400'
-                        : 'text-pink-600 dark:text-pink-400'
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-red-600 dark:text-red-400'
                       }`}>
                       {formatCurrency(saldoLiquido)}
                     </h3>
                   </div>
                   <div className={`p-3 rounded-xl shadow-inner ${saldoLiquido >= 0
-                      ? 'bg-amber-100 dark:bg-amber-955/50 text-amber-600 dark:text-amber-400'
-                      : 'bg-pink-100 dark:bg-pink-955/50 text-pink-600 dark:text-pink-400'
+                      ? 'bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400'
+                      : 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400'
                     }`}>
                     <DollarSign className="h-6 w-6" />
                   </div>
                 </div>
                 <div className="mt-4">
                   <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${saldoLiquido >= 0
-                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
-                      : 'bg-pink-100 text-pink-850 dark:bg-pink-900/30 dark:text-pink-300'
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                      : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
                     }`}>
                     {saldoLiquido >= 0 ? 'Superavitário' : 'Déficit no Mês'}
                   </span>
@@ -867,7 +867,7 @@ export default function App() {
               </div>
 
               {/* Card 4: Dinheiro Guardado */}
-              <div className="glass-panel glass-panel-hover p-6 relative overflow-hidden bg-gradient-to-br from-pink-50 to-pink-100/40 dark:from-slate-900 dark:to-amber-955/5">
+              <div className="glass-panel glass-panel-hover p-6 relative overflow-hidden">
                 <div className="flex justify-between items-start">
                   <div>
                     <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Dinheiro Guardado</p>
@@ -932,11 +932,11 @@ export default function App() {
                     <p className="text-xs text-slate-500">Comparativo das receitas vs despesas nos últimos meses</p>
                   </div>
                   <div className="flex gap-4 text-xs font-semibold">
-                    <span className="flex items-center gap-1.5 text-amber-600">
-                      <span className="h-3 w-3 rounded-sm bg-amber-500"></span> Receitas
+                    <span className="flex items-center gap-1.5 text-green-600 dark:text-green-400">
+                      <span className="h-3 w-3 rounded-sm bg-green-500"></span> Receitas
                     </span>
-                    <span className="flex items-center gap-1.5 text-pink-600">
-                      <span className="h-3 w-3 rounded-sm bg-pink-500"></span> Despesas
+                    <span className="flex items-center gap-1.5 text-red-600 dark:text-red-400">
+                      <span className="h-3 w-3 rounded-sm bg-red-500"></span> Despesas
                     </span>
                   </div>
                 </div>
@@ -967,8 +967,8 @@ export default function App() {
                         }}
                         formatter={(val) => [formatCurrency(val)]}
                       />
-                      <Bar dataKey="Receitas" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={36} />
-                      <Bar dataKey="Despesas" fill="#db2777" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                      <Bar dataKey="Receitas" fill="#22c55e" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                      <Bar dataKey="Despesas" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={36} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
