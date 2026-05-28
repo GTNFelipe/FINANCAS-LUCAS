@@ -1,0 +1,113 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@import "tailwindcss";
+
+/* Habilita o controle do dark mode manual por classe (Tailwind v4) */
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Inter', sans-serif;
+  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-fade-in: fadeIn 0.3s ease-out forwards;
+  --animate-slide-up: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  
+  @keyframes fadeIn {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+  @keyframes slideUp {
+    0% { transform: translateY(15px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+}
+
+/* ==========================================================================
+   1. AMBIENTE DA THAÍS (TEMA CLARO - PALETA ROSA MULTI-TOM)
+   ========================================================================== */
+body {
+  /* Fundo rosa médio suave */
+  @apply font-sans antialiased bg-pink-100 text-slate-800 transition-colors duration-300;
+}
+
+/* Cards - Rosa claro para sobrepor o fundo rosa do body */
+.glass-panel {
+  @apply bg-pink-50/90 border border-pink-200 shadow-sm shadow-pink-200/40 rounded-3xl transition-all duration-300;
+}
+
+.glass-panel-hover {
+  @apply hover:shadow-md hover:border-pink-300 hover:translate-y-[-2px];
+}
+
+/* Botão Primário - Rosa Forte */
+.btn-primary {
+  @apply bg-pink-600 hover:bg-pink-700 active:scale-95 text-white font-bold px-5 py-2.5 rounded-xl transition-all duration-150 flex items-center justify-center gap-2 shadow-xs shadow-pink-200 cursor-pointer;
+}
+
+/* Botão Secundário - Rosa Médio */
+.btn-secondary {
+  @apply bg-pink-200 hover:bg-pink-300 active:scale-95 text-pink-900 font-semibold px-5 py-2.5 rounded-xl transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer;
+}
+
+/* Abas de Navegação (Pills Rosas) */
+.tab-active {
+  @apply bg-pink-600 text-white font-bold px-5 py-2 rounded-xl shadow-xs shadow-pink-200 transition-all cursor-pointer;
+}
+
+.tab-inactive {
+  @apply text-pink-800 hover:text-pink-950 font-semibold px-5 py-2 rounded-xl transition-all cursor-pointer hover:bg-pink-200/40;
+}
+
+/* Scrollbar Rosa */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-pink-300 rounded-full hover:bg-pink-400 transition-colors;
+}
+
+
+/* ==========================================================================
+   2. AMBIENTE DO FELIPE (TEMA ESCURO - PALETA AMARELA / AMBER)
+   ========================================================================== */
+.dark body {
+  @apply bg-slate-950 text-slate-100;
+}
+
+/* Cards no Dark - Slate escuro com contornos sutilmente dourados/âmbar */
+.dark .glass-panel {
+  @apply bg-slate-900/70 border border-amber-500/20 shadow-none;
+}
+
+.dark .glass-panel-hover {
+  @apply hover:border-amber-500/40;
+}
+
+/* Botão Primário no Dark - Dourado/Âmbar */
+.dark .btn-primary {
+  @apply bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold shadow-none;
+}
+
+/* Botão Secundário no Dark - Slate Escuro com texto Dourado */
+.dark .btn-secondary {
+  @apply bg-slate-900 hover:bg-slate-800 text-amber-400 border border-amber-500/20;
+}
+
+/* Abas de Navegação no Dark (Pills Douradas) */
+.dark .tab-active {
+  @apply bg-amber-500 text-slate-950 font-bold shadow-none;
+}
+
+.dark .tab-inactive {
+  @apply text-slate-400 hover:text-amber-400 font-semibold hover:bg-slate-900/60;
+}
+
+/* Scrollbar no Dark */
+.dark ::-webkit-scrollbar-thumb {
+  @apply bg-slate-800 rounded-full hover:bg-slate-700 transition-colors;
+}
