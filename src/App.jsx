@@ -213,7 +213,7 @@ export default function App() {
   // --- Função para Adicionar Transação ---
   const handleAddTransaction = async (e) => {
     e.preventDefault()
-    const valorNum = parseFloat(formValor.replace(',', '.'))
+    const valorNum = parseBRL(formValor)
     if (isNaN(valorNum) || valorNum <= 0) {
       alert("Por favor, digite um valor válido maior que zero.")
       return
@@ -309,7 +309,7 @@ export default function App() {
   // --- Funções do Sistema de Metas ---
   const handleSaveMeta = async (e) => {
     e.preventDefault()
-    const valorMetaNum = parseFloat(formMetaValor.replace(',', '.'))
+    const valorMetaNum = parseBRL(formMetaValor)
     if (isNaN(valorMetaNum) || valorMetaNum < 0) {
       alert("Por favor, digite um valor de meta válido.")
       return
@@ -405,7 +405,7 @@ export default function App() {
   // --- Funções do Sistema de Poupança (Dinheiro Guardado) ---
   const handleSavePoupancaTotal = async (e) => {
     e.preventDefault()
-    const valorNum = parseFloat(formPoupancaTotal.replace(',', '.'))
+    const valorNum = parseBRL(formPoupancaTotal)
     if (isNaN(valorNum) || valorNum < 0) {
       alert("Por favor, digite um valor de poupança total válido.")
       return
@@ -451,7 +451,7 @@ export default function App() {
   const handleSavePoupancaMotivo = async (e) => {
     e.preventDefault()
     const motivoNome = formPoupancaMotivoNome.trim()
-    const valorNum = parseFloat(formPoupancaMotivoValor.replace(',', '.'))
+    const valorNum = parseBRL(formPoupancaMotivoValor)
     if (!motivoNome) {
       alert("Por favor, digite um motivo para o dinheiro guardado.")
       return
@@ -632,12 +632,22 @@ export default function App() {
 
   const chartData = getChartData()
 
+  // Função para converter strings formatadas em pt-BR (ex: "1.234,56" ou "1234,56") para número (float)
+  const parseBRL = (valueString) => {
+    if (valueString === null || valueString === undefined) return 0;
+    if (typeof valueString === 'number') return valueString;
+    // Remove pontos de milhares e converte vírgula decimal para ponto
+    const limpo = valueString.toString().replace(/\./g, '').replace(',', '.');
+    return parseFloat(limpo) || 0;
+  }
+
   // Formatação de Dinheiro em R$
   const formatCurrency = (val) => {
+    const num = typeof val === 'string' ? parseFloat(val) || 0 : val;
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL'
-    }).format(val)
+    }).format(num || 0)
   }
 
   // Mapear ícones das categorias
