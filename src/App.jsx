@@ -1566,8 +1566,8 @@ export default function App() {
             {/* Cabeçalho do Modal */}
             <div className="bg-gradient-to-r from-pink-600 to-rose-600 dark:from-slate-900 dark:to-slate-950 px-6 py-5 text-white flex justify-between items-center">
               <div>
-                <h3 className="font-bold text-lg">Novo Lançamento</h3>
-                <p className="text-xs text-pink-100/90">Lance receitas ou despesas rapidamente</p>
+                <h3 className="font-bold text-lg">{editingTransactionId ? 'Editar Lançamento' : 'Novo Lançamento'}</h3>
+                <p className="text-xs text-pink-100/90">{editingTransactionId ? 'Altere as informações do registro' : 'Lance receitas ou despesas rapidamente'}</p>
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -1578,7 +1578,7 @@ export default function App() {
             </div>
 
             {/* Formulário */}
-            <form onSubmit={handleAddTransaction} className="p-6 space-y-4">
+            <form onSubmit={handleSaveTransaction} className="p-6 space-y-4">
 
               {/* Valor e Tipo */}
               <div className="grid grid-cols-2 gap-4">
@@ -1716,7 +1716,7 @@ export default function App() {
                   type="submit"
                   className="btn-primary flex-1 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-amber-500 dark:to-amber-600 dark:text-slate-950"
                 >
-                  Salvar Lançamento
+                  {editingTransactionId ? 'Salvar Alterações' : 'Salvar Lançamento'}
                 </button>
               </div>
 
