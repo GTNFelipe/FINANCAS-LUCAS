@@ -665,7 +665,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-pink-900 via-pink-955 to-pink-900 dark:from-amber-300 dark:via-amber-400 dark:to-amber-300 bg-clip-text text-transparent">
-                Nossas Finanças
+                Finanças dos Santanas
               </h1>
               <p className="text-xs text-pink-700/80 dark:text-slate-400 font-medium">Controle Compartilhado</p>
             </div>
