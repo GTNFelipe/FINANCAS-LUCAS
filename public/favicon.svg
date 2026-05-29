@@ -1,40 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
   <defs>
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="walletGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#db2777"/>
       <stop offset="100%" stop-color="#f59e0b"/>
     </linearGradient>
-    <linearGradient id="coinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#fde68a"/>
-      <stop offset="100%" stop-color="#f59e0b"/>
-    </linearGradient>
   </defs>
+  
+  <!-- Corpo principal da carteira com cantos arredondados -->
+  <rect x="10" y="25" width="80" height="50" rx="12" stroke="url(#walletGrad)" stroke-width="7" stroke-linejoin="round" />
 
-  <!-- Fundo arredondado com gradiente rosa→âmbar -->
-  <rect width="100" height="100" rx="22" fill="url(#bgGrad)"/>
+  <!-- Aba de fecho na lateral direita -->
+  <path d="M60 40 h18 c5 0, 8 4, 8 10 c0 6, -3 10, -8 10 h-18 Z" stroke="url(#walletGrad)" stroke-width="7" stroke-linejoin="round" />
 
-  <!-- Carteira: corpo -->
-  <rect x="14" y="32" width="58" height="38" rx="9" fill="white" opacity="0.95"/>
-
-  <!-- Aba superior da carteira -->
-  <rect x="14" y="26" width="58" height="14" rx="9" fill="white" opacity="0.75"/>
-
-  <!-- Pocket / bolso direito -->
-  <rect x="50" y="38" width="22" height="24" rx="7" fill="#fce7f3" opacity="0.9"/>
-
-  <!-- Moeda no bolso -->
-  <circle cx="61" cy="50" r="8" fill="url(#coinGrad)"/>
-  <!-- Símbolo $ na moeda -->
-  <text
-    x="61" y="54.5"
-    font-family="Georgia, 'Times New Roman', serif"
-    font-size="11"
-    font-weight="900"
-    fill="#92400e"
-    text-anchor="middle"
-  >$</text>
-
-  <!-- Linha de detalhe na carteira -->
-  <rect x="20" y="44" width="24" height="3" rx="1.5" fill="#f9a8d4" opacity="0.7"/>
-  <rect x="20" y="51" width="16" height="3" rx="1.5" fill="#f9a8d4" opacity="0.5"/>
+  <!-- Botão de pressão do fecho -->
+  <circle cx="68" cy="50" r="4.5" fill="url(#walletGrad)" />
 </svg>

@@ -51,7 +51,11 @@ export default function App() {
   const [dbStatus, setDbStatus] = useState('local') // 'local' | 'supabase_connected' | 'supabase_error'
 
   // --- Estados de Filtro ---
-  const [selectedMonth, setSelectedMonth] = useState('2026-05') // Padrão baseado no mockData
+  const getTodayMonthStr = () => {
+    const today = new Date()
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+  }
+  const [selectedMonth, setSelectedMonth] = useState(getTodayMonthStr)
   const [filterPerson, setFilterPerson] = useState('Todos')
   const [filterType, setFilterType] = useState('Todos')
 
@@ -62,6 +66,7 @@ export default function App() {
   const [formSubcategoria, setFormSubcategoria] = useState('')
   const [formQuemPagou, setFormQuemPagou] = useState('Felipe') // 'Felipe' | 'Thaís'
   const [formStatus, setFormStatus] = useState('Pago') // 'Pago' | 'Pendente'
+  const [formRecorrencia, setFormRecorrencia] = useState(1) // Padrão 1x (Repetições/Parcelas)
   const [formDataReferencia, setFormDataReferencia] = useState(() => {
     const today = new Date()
     const yyyy = today.getFullYear()
@@ -88,7 +93,10 @@ export default function App() {
     'Transporte',
     'Despesas Pessoais',
     'Lazer',
-    'Investimentos'
+    'Investimentos',
+    'Alimentação',
+    'Educação',
+    'Imprevistos'
   ]
 
   // --- Efeito para Carregar Dados e Aplicar Tema ---
@@ -106,6 +114,68 @@ export default function App() {
   useEffect(() => {
     loadData()
   }, [])
+
+  // Função para verificar virada de mês e redefinir status de contas recorrentes pagas para pendente.
+  // Nota: Esta lógica é complementada pelo Cron Job 'reset-recorrentes-mensal' no Supabase,
+  // garantindo redundância e funcionamento tanto offline (local) quanto direto no servidor.
+  const checkMonthTurn = async (loadedTxs, isSupabaseActive) => {
+    const todayStr = getTodayMonthStr()
+    const lastChecked = localStorage.getItem('financas_last_checked_month')
+
+    if (lastChecked && lastChecked !== todayStr) {
+      const recurrenceRegex = /\(\d+\/\d+\)/
+      
+      const txsToUpdate = loadedTxs.filter(t => {
+        const isCurrentMonth = t.data_referencia.substring(0, 7) === todayStr
+        const isRecurring = recurrenceRegex.test(t.subcategoria)
+        const isPaid = t.status === 'Pago'
+        return isCurrentMonth && isRecurring && isPaid
+      })
+
+      if (txsToUpdate.length > 0) {
+        const updatedIds = new Set(txsToUpdate.map(t => t.id))
+        
+        // Atualizar estado
+        setTransactions(prev => prev.map(t => {
+          if (updatedIds.has(t.id)) {
+            return { ...t, status: 'Pendente' }
+          }
+          return t
+        }))
+
+        // Atualizar localStorage
+        const savedTxsStr = localStorage.getItem('financas_transactions')
+        if (savedTxsStr) {
+          const localList = JSON.parse(savedTxsStr)
+          const updatedLocal = localList.map(t => {
+            if (updatedIds.has(t.id)) {
+              return { ...t, status: 'Pendente' }
+            }
+            return t
+          })
+          localStorage.setItem('financas_transactions', JSON.stringify(updatedLocal))
+        }
+
+        // Atualizar Supabase se conectado
+        if (isSupabaseActive && isSupabaseConfigured) {
+          try {
+            const idsArray = Array.from(updatedIds)
+            const { error } = await supabase
+              .from('transacoes')
+              .update({ status: 'Pendente' })
+              .in('id', idsArray)
+
+            if (error) throw error
+          } catch (err) {
+            console.error("Erro ao atualizar status de recorrentes no Supabase:", err.message)
+          }
+        }
+        alert(`${txsToUpdate.length} conta(s) recorrente(s) do novo mês foram redefinida(s) para Pendente automaticamente.`)
+      }
+    }
+
+    localStorage.setItem('financas_last_checked_month', todayStr)
+  }
 
   // Sincronizar dados locais se o Supabase não estiver ativo
   const loadLocalData = () => {
@@ -141,14 +211,7 @@ export default function App() {
     setTransactions(loadedTxs)
     setMetas(loadedMetas)
     setPoupancas(loadedPoupancas)
-
-    // Pegar o mês mais recente disponível como padrão
-    if (loadedTxs.length > 0) {
-      const uniqueMonths = [...new Set(loadedTxs.map(t => t.data_referencia.substring(0, 7)))].sort()
-      if (uniqueMonths.length > 0) {
-        setSelectedMonth(uniqueMonths[uniqueMonths.length - 1])
-      }
-    }
+    checkMonthTurn(loadedTxs, false)
   }
 
   const loadData = async () => {
@@ -191,14 +254,7 @@ export default function App() {
             localStorage.setItem('financas_poupanca', JSON.stringify(initialPoupanca))
           }
         }
-
-        // Definir o mês padrão mais recente
-        if (txData && txData.length > 0) {
-          const uniqueMonths = [...new Set(txData.map(t => t.data_referencia.substring(0, 7)))].sort()
-          if (uniqueMonths.length > 0) {
-            setSelectedMonth(uniqueMonths[uniqueMonths.length - 1])
-          }
-        }
+        checkMonthTurn(txData || [], true)
       } catch (err) {
         console.error("Falha ao sincronizar com o Supabase, ativando modo local:", err.message)
         setDbStatus('supabase_error')
@@ -222,7 +278,31 @@ export default function App() {
     setFormQuemPagou(tx.quem_pagou)
     setFormStatus(tx.status)
     setFormDataReferencia(tx.data_referencia)
+    setFormRecorrencia(1)
     setIsModalOpen(true)
+  }
+
+  // Helper robusto para adicionar meses a uma data YYYY-MM-DD
+  const addMonths = (dateStr, monthsToAdd) => {
+    if (!dateStr) return dateStr
+    const parts = dateStr.split('-')
+    if (parts.length !== 3) return dateStr
+    const year = parseInt(parts[0], 10)
+    const month = parseInt(parts[1], 10)
+    const day = parseInt(parts[2], 10)
+
+    // Cria data no dia 1 do mês de destino para evitar transbordamento automático
+    const date = new Date(year, month - 1 + monthsToAdd, 1)
+
+    // Obtém o número máximo de dias do mês de destino
+    const maxDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
+    const targetDay = Math.min(day, maxDay)
+    date.setDate(targetDay)
+
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
   }
 
   // --- Função para Adicionar ou Editar Transação ---
@@ -245,20 +325,64 @@ export default function App() {
     }
 
     if (editingTransactionId) {
-      // Modo Edição
+      // Modo Edição com suporte a recorrência
+      const numRecorrencias = parseInt(formRecorrencia, 10) || 1
+      const firstSubcat = numRecorrencias > 1
+        ? `${formSubcategoria.trim() || 'Outros'} (1/${numRecorrencias})`
+        : (formSubcategoria.trim() || 'Outros')
+
+      const mainTxData = {
+        data_referencia: formDataReferencia,
+        tipo: formTipo,
+        categoria: formCategoria,
+        subcategoria: firstSubcat,
+        valor: valorNum,
+        quem_pagou: formQuemPagou,
+        status: formStatus
+      }
+
+      const extraTxsToInsert = []
+      for (let i = 1; i < numRecorrencias; i++) {
+        const dateRef = addMonths(formDataReferencia, i)
+        const subcat = `${formSubcategoria.trim() || 'Outros'} (${i + 1}/${numRecorrencias})`
+        extraTxsToInsert.push({
+          criado_em: new Date().toISOString(),
+          data_referencia: dateRef,
+          tipo: formTipo,
+          categoria: formCategoria,
+          subcategoria: subcat,
+          valor: valorNum,
+          quem_pagou: formQuemPagou,
+          status: formStatus
+        })
+      }
+
       if (isSupabaseConfigured && dbStatus === 'supabase_connected') {
         setIsSyncing(true)
         try {
-          const { data, error } = await supabase
+          const { data: updateData, error: updateError } = await supabase
             .from('transacoes')
-            .update(txData)
+            .update(mainTxData)
             .eq('id', editingTransactionId)
             .select()
 
-          if (error) throw error
+          if (updateError) throw updateError
 
-          if (data && data.length > 0) {
-            setTransactions(prev => prev.map(t => t.id === editingTransactionId ? data[0] : t))
+          let insertedData = []
+          if (extraTxsToInsert.length > 0) {
+            const { data: insData, error: insError } = await supabase
+              .from('transacoes')
+              .insert(extraTxsToInsert)
+              .select()
+            if (insError) throw insError
+            insertedData = insData || []
+          }
+
+          if (updateData && updateData.length > 0) {
+            setTransactions(prev => {
+              const updatedList = prev.map(t => t.id === editingTransactionId ? updateData[0] : t)
+              return [...insertedData, ...updatedList]
+            })
           } else {
             loadData()
           }
@@ -266,44 +390,69 @@ export default function App() {
         } catch (err) {
           console.error("Erro ao atualizar no Supabase, atualizando localmente:", err.message)
           alert("Erro no Supabase. Lançamento atualizado localmente.")
-          updateTxLocal(editingTransactionId, txData)
+          const localTxs = extraTxsToInsert.map((tx, idx) => ({ ...tx, id: 'tx-' + (Date.now() + idx + 1) }))
+          const updated = transactions.map(t => t.id === editingTransactionId ? { ...t, ...mainTxData } : t)
+          const finalTxs = [...localTxs, ...updated]
+          setTransactions(finalTxs)
+          localStorage.setItem('financas_transactions', JSON.stringify(finalTxs))
         } finally {
           setIsSyncing(false)
         }
       } else {
-        updateTxLocal(editingTransactionId, txData)
+        const localTxs = extraTxsToInsert.map((tx, idx) => ({ ...tx, id: 'tx-' + (Date.now() + idx + 1) }))
+        const updated = transactions.map(t => t.id === editingTransactionId ? { ...t, ...mainTxData } : t)
+        const finalTxs = [...localTxs, ...updated]
+        setTransactions(finalTxs)
+        localStorage.setItem('financas_transactions', JSON.stringify(finalTxs))
         alert("Lançamento atualizado localmente!")
       }
     } else {
-      // Modo Criação
-      const newTx = {
-        ...txData,
-        criado_em: new Date().toISOString()
+      // Modo Criação com recorrência
+      const numRecorrencias = parseInt(formRecorrencia, 10) || 1
+      const txsToInsert = []
+
+      for (let i = 0; i < numRecorrencias; i++) {
+        const dateRef = addMonths(formDataReferencia, i)
+        const subcat = numRecorrencias > 1
+          ? `${formSubcategoria.trim() || 'Outros'} (${i + 1}/${numRecorrencias})`
+          : (formSubcategoria.trim() || 'Outros')
+
+        txsToInsert.push({
+          criado_em: new Date().toISOString(),
+          data_referencia: dateRef,
+          tipo: formTipo,
+          categoria: formCategoria,
+          subcategoria: subcat,
+          valor: valorNum,
+          quem_pagou: formQuemPagou,
+          status: formStatus
+        })
       }
+
       if (isSupabaseConfigured && dbStatus === 'supabase_connected') {
         setIsSyncing(true)
         try {
           const { data, error } = await supabase
             .from('transacoes')
-            .insert([newTx])
+            .insert(txsToInsert)
             .select()
 
           if (error) throw error
 
           if (data && data.length > 0) {
-            setTransactions(prev => [data[0], ...prev])
+            setTransactions(prev => [...data, ...prev])
           } else {
             loadData()
           }
         } catch (err) {
           console.error("Erro ao salvar no Supabase, gravando localmente:", err.message)
-          alert("Erro ao conectar com o Supabase. Transação salva localmente no navegador.")
-          saveTxLocal(newTx)
+          alert("Erro ao conectar com o Supabase. Lançamento(s) salvo(s) localmente no navegador.")
+          saveTxsLocal(txsToInsert)
         } finally {
           setIsSyncing(false)
         }
       } else {
-        saveTxLocal(newTx)
+        saveTxsLocal(txsToInsert)
       }
     }
 
@@ -311,6 +460,7 @@ export default function App() {
     setEditingTransactionId(null)
     setFormValor('')
     setFormSubcategoria('')
+    setFormRecorrencia(1)
     const today = new Date()
     const yyyy = today.getFullYear()
     const mm = String(today.getMonth() + 1).padStart(2, '0')
@@ -319,9 +469,9 @@ export default function App() {
     setIsModalOpen(false)
   }
 
-  const saveTxLocal = (newTx) => {
-    const localTx = { ...newTx, id: 'tx-' + Date.now() }
-    const updated = [localTx, ...transactions]
+  const saveTxsLocal = (newTxs) => {
+    const localTxs = newTxs.map((tx, idx) => ({ ...tx, id: 'tx-' + (Date.now() + idx) }))
+    const updated = [...localTxs, ...transactions]
     setTransactions(updated)
     localStorage.setItem('financas_transactions', JSON.stringify(updated))
   }
@@ -359,6 +509,38 @@ export default function App() {
 
   const deleteTxLocal = (id) => {
     const updated = transactions.filter(t => t.id !== id)
+    setTransactions(updated)
+    localStorage.setItem('financas_transactions', JSON.stringify(updated))
+  }
+
+  // --- Função para Alternar Status da Transação (Pago/Pendente) ---
+  const toggleTransactionStatus = async (tx) => {
+    const newStatus = tx.status === 'Pago' ? 'Pendente' : 'Pago'
+
+    if (isSupabaseConfigured && dbStatus === 'supabase_connected') {
+      setIsSyncing(true)
+      try {
+        const { error } = await supabase
+          .from('transacoes')
+          .update({ status: newStatus })
+          .eq('id', tx.id)
+
+        if (error) throw error
+
+        setTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: newStatus } : t))
+      } catch (err) {
+        console.error("Erro ao alternar status no Supabase, alterando localmente:", err.message)
+        toggleTxStatusLocal(tx.id, newStatus)
+      } finally {
+        setIsSyncing(false)
+      }
+    } else {
+      toggleTxStatusLocal(tx.id, newStatus)
+    }
+  }
+
+  const toggleTxStatusLocal = (id, newStatus) => {
+    const updated = transactions.map(t => t.id === id ? { ...t, status: newStatus } : t)
     setTransactions(updated)
     localStorage.setItem('financas_transactions', JSON.stringify(updated))
   }
@@ -664,27 +846,39 @@ export default function App() {
   })
 
   // Módulos de meses únicos para filtros
-  const uniqueMonths = [...new Set(transactions.map(t => t.data_referencia.substring(0, 7)))].sort((a, b) => b.localeCompare(a))
+  const uniqueMonths = [...new Set([getTodayMonthStr(), ...transactions.map(t => t.data_referencia.substring(0, 7))])].sort((a, b) => b.localeCompare(a))
 
   // --- Formatação para o Gráfico Recharts ---
   const getChartData = () => {
     const monthsData = {}
+    const [yearStr, monthStr] = selectedMonth.split('-')
+    const year = parseInt(yearStr, 10)
+    const month = parseInt(monthStr, 10)
+
+    const monthsToShow = []
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(year, month - 1 - i, 1)
+      const y = date.getFullYear()
+      const m = String(date.getMonth() + 1).padStart(2, '0')
+      monthsToShow.push(`${y}-${m}`)
+    }
+
+    monthsToShow.forEach(m => {
+      monthsData[m] = { name: m, Receitas: 0, Despesas: 0 }
+    })
+
     transactions.forEach(t => {
-      const month = t.data_referencia.substring(0, 7)
-      if (!monthsData[month]) {
-        monthsData[month] = { name: month, Receitas: 0, Despesas: 0 }
-      }
-      if (t.tipo === 'Receita') {
-        monthsData[month].Receitas += t.valor
-      } else {
-        monthsData[month].Despesas += t.valor
+      const m = t.data_referencia.substring(0, 7)
+      if (monthsData[m]) {
+        if (t.tipo === 'Receita') {
+          monthsData[m].Receitas += t.valor
+        } else {
+          monthsData[m].Despesas += t.valor
+        }
       }
     })
 
-    // Retorna ordenado por mês e limita aos últimos 6 meses para legibilidade
-    return Object.values(monthsData)
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .slice(-6)
+    return monthsToShow.map(m => monthsData[m])
   }
 
   const chartData = getChartData()
@@ -717,6 +911,9 @@ export default function App() {
       case 'Despesas Pessoais': return '👤';
       case 'Lazer': return '🍿';
       case 'Investimentos': return '📈';
+      case 'Alimentação': return '🍲';
+      case 'Educação': return '📚';
+      case 'Imprevistos': return '⚠️';
       default: return '💰';
     }
   }
@@ -727,7 +924,7 @@ export default function App() {
       <header className="sticky top-0 z-10 backdrop-blur-lg bg-pink-50/80 dark:bg-slate-900/80 border-b border-pink-200/60 dark:border-slate-800/60">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="bg-pink-600 dark:bg-amber-500 p-2.5 rounded-xl text-white dark:text-slate-955 shadow-lg shadow-pink-500/20 dark:shadow-amber-500/10">
+            <div className="bg-pink-600 dark:bg-amber-500 p-2.5 rounded-xl text-white dark:text-slate-950 shadow-lg shadow-pink-500/20 dark:shadow-amber-500/10">
               <Wallet className="h-6 w-6" />
             </div>
             <div>
@@ -836,7 +1033,7 @@ export default function App() {
                 <select
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="flex-1 sm:flex-initial bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-amber-500/20 rounded-xl py-2 px-4 font-semibold text-pink-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-pink-500/20"
+                  className="flex-1 sm:flex-initial bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-amber-500/20 rounded-xl py-2 px-4 font-semibold text-pink-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20 focus:border-pink-500 dark:focus:border-amber-500"
                 >
                   {uniqueMonths.length > 0 ? (
                     uniqueMonths.map(m => (
@@ -938,56 +1135,28 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Card 4: Dinheiro Guardado */}
+              {/* Card 4: Metas (KPI) */}
               <div className="glass-panel glass-panel-hover p-6 relative overflow-hidden">
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Dinheiro Guardado</p>
+                    <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Metas do Mês</p>
                     <h3 className="text-2xl font-bold mt-2 text-slate-900 dark:text-white">
-                      {formatCurrency(totalGuardado)}
+                      {metas.length} Ativas
                     </h3>
                   </div>
                   <button
-                    onClick={() => {
-                      setFormPoupancaTotal(totalGuardado.toString())
-                      setIsPoupancaModalOpen(true)
-                    }}
-                    className="p-3 bg-pink-100 hover:bg-pink-200 dark:bg-amber-955/60 dark:hover:bg-amber-950/80 rounded-xl text-pink-600 dark:text-amber-400 shadow-inner transition-colors"
-                    title="Gerenciar Dinheiro Guardado"
+                    onClick={() => setActiveTab('metas')}
+                    className="p-3 bg-pink-100 hover:bg-pink-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl text-pink-600 dark:text-amber-400 shadow-inner transition-colors"
+                    title="Ajustar Metas"
                   >
-                    <SlidersHorizontal className="h-5 w-5" />
+                    <Target className="h-5 w-5" />
                   </button>
                 </div>
-
-                {/* Distribuição dos Motivos */}
-                <div className="mt-4 space-y-1.5">
-                  {motivosPoupanca.length > 0 ? (
-                    <>
-                      <div className="flex justify-between text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-                        <span>Alocações principais:</span>
-                        <span>{formatCurrency(totalAlocado)} alocado</span>
-                      </div>
-                      <div className="space-y-1 max-h-[48px] overflow-hidden">
-                        {motivosPoupanca.slice(0, 2).map(p => (
-                          <div key={p.id} className="flex justify-between text-[10px] text-slate-650 dark:text-slate-400">
-                            <span className="truncate max-w-[120px] font-medium">• {p.motivo}</span>
-                            <span className="font-semibold">{formatCurrency(p.valor)}</span>
-                          </div>
-                        ))}
-                        {motivosPoupanca.length > 2 && (
-                          <div className="text-[9px] text-slate-400 dark:text-slate-500 italic font-medium">
-                            + {motivosPoupanca.length - 2} outros motivos...
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-[10px] text-slate-400 dark:text-slate-500 italic mt-3">
-                      Sem motivos criados. Clique para gerenciar.
-                    </div>
-                  )}
+                <div className="mt-4 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  Limite Total: <span className="font-bold text-slate-700 dark:text-slate-300">
+                    {formatCurrency(metas.reduce((sum, m) => sum + m.valor_meta, 0))}
+                  </span>
                 </div>
-
                 {/* Efeito decorativo */}
                 <div className="absolute right-0 bottom-0 h-16 w-16 bg-pink-500/5 rounded-full blur-xl translate-x-4 translate-y-4"></div>
               </div>
@@ -1047,65 +1216,104 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Minipainel de Metas Rápido */}
+              {/* Painel de Dinheiro Guardado em Evidência */}
               <div className="glass-panel p-6 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">Metas</h3>
-                    <Target className="h-5 w-5 text-pink-600 dark:text-amber-400" />
+                    <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">Dinheiro Guardado</h3>
+                    <button
+                      onClick={() => {
+                        setFormPoupancaTotal(totalGuardado.toString())
+                        setIsPoupancaModalOpen(true)
+                      }}
+                      className="p-2.5 bg-pink-100 hover:bg-pink-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl text-pink-600 dark:text-amber-400 shadow-inner transition-colors"
+                      title="Gerenciar Dinheiro Guardado"
+                    >
+                      <SlidersHorizontal className="h-4.5 w-4.5" />
+                    </button>
                   </div>
-                  <p className="text-xs text-slate-500 mb-6">Metas mensais por categorias básicas. Ajuste-as para gerenciar limites.</p>
 
-                  <div className="space-y-4">
-                    {metas.length > 0 ? (
-                      metas.map(meta => {
-                        const spend = activeMonthTransactions
-                          .filter(t => t.tipo === 'Despesa' && t.categoria === meta.categoria)
-                          .reduce((sum, t) => sum + t.valor, 0)
-                        const pct = meta.valor_meta > 0 ? (spend / meta.valor_meta) * 100 : 0
+                  <div className="mb-6">
+                    <span className="text-xs font-semibold text-slate-500">Saldo Geral Guardado</span>
+                    <h4 className="text-3xl font-black mt-1 text-slate-900 dark:text-white tracking-tight">
+                      {formatCurrency(totalGuardado)}
+                    </h4>
+                  </div>
 
+                  {/* Barra de Distribuição de Alocação */}
+                  <div className="space-y-2 mb-6">
+                    <div className="flex justify-between text-xs font-bold">
+                      <span className="text-slate-700 dark:text-slate-300">Alocação por Motivos</span>
+                      <span className="text-slate-500">
+                        {totalGuardado > 0 ? ((totalAlocado / totalGuardado) * 100).toFixed(0) : 0}% alocado
+                      </span>
+                    </div>
+
+                    <div className="w-full bg-pink-50 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden flex">
+                      {motivosPoupanca.map((p, idx) => {
+                        const pct = totalGuardado > 0 ? (p.valor / totalGuardado) * 100 : 0
+                        const colors = [
+                          'bg-pink-500 dark:bg-amber-500',
+                          'bg-rose-500 dark:bg-amber-600',
+                          'bg-emerald-500 dark:bg-slate-600',
+                          'bg-indigo-500 dark:bg-amber-400'
+                        ]
+                        const colorClass = colors[idx % colors.length]
                         return (
-                          <div key={meta.id} className="space-y-1.5">
-                            <div className="flex justify-between text-xs font-semibold">
-                              <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-350">
-                                <span>{getCategoryIcon(meta.categoria)}</span>
-                                <div>
-                                  <div>{meta.categoria}</div>
-                                  {meta.descricao && (
-                                    <div className="text-[10px] text-slate-450 dark:text-slate-500 font-normal italic max-w-[150px] truncate leading-tight" title={meta.descricao}>
-                                      {meta.descricao}
-                                    </div>
-                                  )}
-                                </div>
-                              </span>
-                              <span className="text-slate-600 dark:text-slate-400">
-                                {formatCurrency(spend)} / <span className="text-slate-400">{formatCurrency(meta.valor_meta)}</span>
-                              </span>
-                            </div>
-                            <div className="w-full bg-pink-50 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full ${pct >= 100 ? 'bg-rose-500' : pct >= 80 ? 'bg-amber-500' : 'bg-pink-500 dark:bg-amber-500'
-                                  }`}
-                                style={{ width: `${Math.min(100, pct)}%` }}
-                              ></div>
-                            </div>
-                          </div>
+                          <div
+                            key={p.id}
+                            className={`h-full ${colorClass}`}
+                            style={{ width: `${pct}%` }}
+                            title={`${p.motivo}: ${formatCurrency(p.valor)} (${pct.toFixed(1)}%)`}
+                          ></div>
                         )
-                      })
-                    ) : (
-                      <p className="text-xs text-slate-500 text-center py-4">Nenhuma meta estipulada ainda.</p>
-                    )}
+                      })}
+                      {saldoLivre > 0 && (
+                        <div
+                          className="h-full bg-slate-200 dark:bg-slate-700"
+                          style={{ width: `${totalGuardado > 0 ? (saldoLivre / totalGuardado) * 100 : 100}%` }}
+                          title={`Livre: ${formatCurrency(saldoLivre)} (${totalGuardado > 0 ? ((saldoLivre / totalGuardado) * 100).toFixed(1) : 100}%)`}
+                        ></div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Listagem de Alocações */}
+                  <div className="space-y-3">
+                    <h5 className="text-xs font-bold text-slate-550 dark:text-slate-450">Detalhamento dos Motivos</h5>
+                    <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+                      {motivosPoupanca.length > 0 ? (
+                        motivosPoupanca.map((p, idx) => {
+                          const pct = totalGuardado > 0 ? (p.valor / totalGuardado) * 100 : 0
+                          const colors = [
+                            'bg-pink-500 dark:bg-amber-500',
+                            'bg-rose-500 dark:bg-amber-600',
+                            'bg-emerald-500 dark:bg-slate-600',
+                            'bg-indigo-500 dark:bg-amber-400'
+                          ]
+                          const bulletColor = colors[idx % colors.length]
+                          return (
+                            <div key={p.id} className="flex justify-between items-center text-xs">
+                              <span className="flex items-center gap-2 text-slate-700 dark:text-slate-350 min-w-0 flex-1">
+                                <span className={`h-2.5 w-2.5 rounded-full ${bulletColor} flex-shrink-0`}></span>
+                                <span className="truncate font-semibold">{p.motivo}</span>
+                              </span>
+                              <span className="font-bold text-slate-800 dark:text-slate-300 whitespace-nowrap ml-2">
+                                {formatCurrency(p.valor)} <span className="text-[10px] text-slate-400 font-normal">({pct.toFixed(0)}%)</span>
+                              </span>
+                            </div>
+                          )
+                        })
+                      ) : (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 italic py-2 text-center">Nenhum motivo específico criado.</p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                <div className="mt-8 border-t border-pink-200 dark:border-amber-500/20 pt-4 flex justify-between items-center text-xs">
-                  <span className="text-slate-500 font-medium">Quer mudar a meta de lazer?</span>
-                  <button
-                    onClick={() => setActiveTab('metas')}
-                    className="text-pink-700 dark:text-amber-400 font-bold flex items-center gap-0.5 hover:underline hover:text-pink-900 dark:hover:text-amber-300"
-                  >
-                    Ajustar agora <ChevronRight className="h-3 w-3" />
-                  </button>
+                <div className="mt-6 border-t border-pink-200 dark:border-amber-500/20 pt-4 flex justify-between items-center text-xs">
+                  <span className="text-slate-555 dark:text-slate-450 font-medium">Saldo Livre (Sem destinação):</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-300">{formatCurrency(saldoLivre)}</span>
                 </div>
               </div>
 
@@ -1126,7 +1334,7 @@ export default function App() {
                         key={p}
                         onClick={() => setFilterPerson(p)}
                         className={`px-3 py-1.5 rounded-md font-semibold transition-all ${filterPerson === p
-                          ? 'bg-pink-50 dark:bg-amber-500 text-pink-900 dark:text-slate-955 shadow-sm font-bold'
+                          ? 'bg-pink-50 dark:bg-amber-500 text-pink-900 dark:text-slate-950 shadow-sm font-bold'
                           : 'text-pink-700/70 hover:text-pink-900 dark:text-slate-400 dark:hover:text-slate-200'
                           }`}
                       >
@@ -1141,7 +1349,7 @@ export default function App() {
                         key={t}
                         onClick={() => setFilterType(t)}
                         className={`px-3 py-1.5 rounded-md font-semibold transition-all ${filterType === t
-                          ? 'bg-pink-50 dark:bg-amber-500 text-pink-900 dark:text-slate-955 shadow-sm font-bold'
+                          ? 'bg-pink-50 dark:bg-amber-500 text-pink-900 dark:text-slate-950 shadow-sm font-bold'
                           : 'text-pink-700/70 hover:text-pink-900 dark:text-slate-400 dark:hover:text-slate-200'
                           }`}
                       >
@@ -1172,14 +1380,14 @@ export default function App() {
                           <td className="p-4 text-slate-500 dark:text-slate-400 whitespace-nowrap">
                             {formatDate(tx.data_referencia)}
                           </td>
-                          <td className="p-4">
+                          <td className="p-4 max-w-[200px]">
                             <div className="flex items-center gap-3">
-                              <span className="text-xl p-1 bg-pink-200/50 dark:bg-slate-800 rounded-lg">
+                              <span className="text-xl p-1 bg-pink-200/50 dark:bg-slate-800 rounded-lg flex-shrink-0">
                                 {getCategoryIcon(tx.categoria)}
                               </span>
-                              <div>
-                                <span className="font-semibold text-slate-800 dark:text-slate-250 block">{tx.categoria}</span>
-                                <span className="text-xs text-slate-500 block">{tx.subcategoria}</span>
+                              <div className="min-w-0 flex-1">
+                                <span className="font-semibold text-slate-800 dark:text-slate-200 block truncate">{tx.categoria}</span>
+                                <span className="text-xs text-slate-500 dark:text-slate-400 block truncate" title={tx.subcategoria}>{tx.subcategoria}</span>
                               </div>
                             </div>
                           </td>
@@ -1198,21 +1406,34 @@ export default function App() {
                             }`}>
                             {tx.tipo === 'Receita' ? '+' : '-'} {formatCurrency(tx.valor)}
                           </td>
-                          <td className="p-4">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold ${tx.status === 'Pago'
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400'
-                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-400'
-                              }`}>
-                              {tx.status === 'Pago' ? (
-                                <>
-                                  <Check className="h-3 w-3" /> Pago
-                                </>
-                              ) : (
-                                <>
-                                  <Clock className="h-3 w-3" /> Pendente
-                                </>
-                              )}
-                            </span>
+                          <td className="p-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => toggleTransactionStatus(tx)}
+                                className={`p-1.5 rounded-lg transition-all active:scale-95 cursor-pointer hover:bg-pink-100/60 dark:hover:bg-slate-800 ${tx.status === 'Pago'
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-rose-600 dark:text-rose-400'
+                                  }`}
+                                title="Alternar Status (Pago/Pendente)"
+                              >
+                                <RefreshCw className="h-3.5 w-3.5 transition-transform hover:rotate-180 duration-500" />
+                              </button>
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold ${tx.status === 'Pago'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400'
+                                : 'bg-rose-100 text-rose-800 dark:bg-rose-950/35 dark:text-rose-450'
+                                }`}>
+                                {tx.status === 'Pago' ? (
+                                  <>
+                                    <Check className="h-3 w-3" /> Pago
+                                  </>
+                                ) : (
+                                  <>
+                                    <Clock className="h-3 w-3" /> Pendente
+                                  </>
+                                )}
+                              </span>
+                            </div>
                           </td>
                           <td className="p-4 text-center">
                             <div className="flex items-center justify-center gap-1.5">
@@ -1297,7 +1518,7 @@ export default function App() {
                         key={p}
                         onClick={() => setFilterPerson(p)}
                         className={`px-3 py-1.5 rounded-md font-semibold transition-all ${filterPerson === p
-                          ? 'bg-pink-50 dark:bg-amber-500 text-pink-900 dark:text-slate-955 shadow-sm font-bold'
+                          ? 'bg-pink-50 dark:bg-amber-500 text-pink-900 dark:text-slate-950 shadow-sm font-bold'
                           : 'text-pink-700/70 hover:text-pink-900 dark:text-slate-400 dark:hover:text-slate-200'
                           }`}
                       >
@@ -1313,7 +1534,7 @@ export default function App() {
                         key={t}
                         onClick={() => setFilterType(t)}
                         className={`px-3 py-1.5 rounded-md font-semibold transition-all ${filterType === t
-                          ? 'bg-pink-50 dark:bg-amber-500 text-pink-900 dark:text-slate-955 shadow-sm font-bold'
+                          ? 'bg-pink-50 dark:bg-amber-500 text-pink-900 dark:text-slate-950 shadow-sm font-bold'
                           : 'text-pink-700/70 hover:text-pink-900 dark:text-slate-400 dark:hover:text-slate-200'
                           }`}
                       >
@@ -1343,16 +1564,16 @@ export default function App() {
                     {filteredTransactions.length > 0 ? (
                       filteredTransactions.map(tx => (
                         <tr key={tx.id} className="hover:bg-pink-200/20 dark:hover:bg-slate-900/30 transition-colors">
-                          <td className="p-4 text-slate-500 dark:text-slate-450 whitespace-nowrap">
+                          <td className="p-4 text-slate-500 dark:text-slate-400 whitespace-nowrap">
                             {new Date(tx.criado_em).toLocaleDateString('pt-BR')} {new Date(tx.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                           </td>
-                          <td className="p-4 font-semibold text-slate-700 dark:text-slate-350">
+                          <td className="p-4 font-semibold text-slate-700 dark:text-slate-300">
                             {tx.data_referencia.split('-')[1]}/{tx.data_referencia.split('-')[0]}
                           </td>
-                          <td className="p-4 font-bold text-slate-850 dark:text-slate-200">
+                          <td className="p-4 font-bold text-slate-800 dark:text-slate-200">
                             {getCategoryIcon(tx.categoria)} {tx.categoria}
                           </td>
-                          <td className="p-4 text-slate-500 dark:text-slate-400">{tx.subcategoria}</td>
+                          <td className="p-4 text-slate-500 dark:text-slate-400 max-w-[200px] truncate" title={tx.subcategoria}>{tx.subcategoria}</td>
                           <td className="p-4">
                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${tx.quem_pagou === 'Felipe'
                               ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
@@ -1365,26 +1586,39 @@ export default function App() {
                             }`}>
                             {tx.tipo === 'Receita' ? '+' : '-'} {formatCurrency(tx.valor)}
                           </td>
-                          <td className="p-4">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold ${tx.status === 'Pago'
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-450'
-                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-450'
-                              }`}>
-                              {tx.status === 'Pago' ? 'Pago' : 'Pendente'}
-                            </span>
+                          <td className="p-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => toggleTransactionStatus(tx)}
+                                className={`p-1.5 rounded-lg transition-all active:scale-95 cursor-pointer hover:bg-pink-100/60 dark:hover:bg-slate-800 ${tx.status === 'Pago'
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-rose-600 dark:text-rose-400'
+                                  }`}
+                                title="Alternar Status (Pago/Pendente)"
+                              >
+                                <RefreshCw className="h-3.5 w-3.5 transition-transform hover:rotate-180 duration-500" />
+                              </button>
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold ${tx.status === 'Pago'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-450'
+                                : 'bg-rose-100 text-rose-800 dark:bg-rose-950/35 dark:text-rose-450'
+                                }`}>
+                                {tx.status === 'Pago' ? 'Pago' : 'Pendente'}
+                              </span>
+                            </div>
                           </td>
                           <td className="p-4 text-center">
                             <div className="flex items-center justify-center gap-1.5">
                               <button
                                 onClick={() => startEditTransaction(tx)}
-                                className="p-1.5 text-slate-450 hover:text-pink-600 dark:hover:text-amber-400 rounded-lg transition-all"
+                                className="p-1.5 text-slate-400 hover:text-pink-600 dark:hover:text-amber-400 rounded-lg transition-all"
                                 title="Editar Lançamento"
                               >
                                 <Edit className="h-4 w-4" />
                               </button>
                               <button
                                 onClick={() => handleDeleteTransaction(tx.id)}
-                                className="p-1.5 text-slate-450 hover:text-rose-600 dark:hover:text-rose-450 rounded-lg transition-all"
+                                className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-450 rounded-lg transition-all"
                                 title="Excluir Lançamento"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -1433,7 +1667,7 @@ export default function App() {
                       <select
                         value={formMetaCategoria}
                         onChange={(e) => setFormMetaCategoria(e.target.value)}
-                        className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-semibold outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20"
+                        className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-semibold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
                       >
                         {categoriasValidas.map(c => (
                           <option key={c} value={c}>
@@ -1455,7 +1689,7 @@ export default function App() {
                           value={formMetaValor}
                           onChange={(e) => setFormMetaValor(e.target.value)}
                           placeholder="Ex: 1000,00"
-                          className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl pl-9 pr-4 py-2.5 text-sm text-pink-955 dark:text-white font-bold outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20"
+                          className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl pl-9 pr-4 py-2.5 text-sm text-pink-955 dark:text-white font-bold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
                         />
                       </div>
                     </div>
@@ -1468,7 +1702,7 @@ export default function App() {
                       value={formMetaDescricao}
                       onChange={(e) => setFormMetaDescricao(e.target.value)}
                       placeholder="Ex: Controlar gastos com delivery e jantares fora"
-                      className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm text-pink-955 dark:text-white font-medium outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20"
+                      className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm text-pink-955 dark:text-white font-medium outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
                     />
                   </div>
 
@@ -1483,7 +1717,7 @@ export default function App() {
 
                 {/* Listagem de Metas Ativas */}
                 <div className="mt-8 space-y-3">
-                  <h4 className="text-sm font-bold text-slate-700 dark:text-slate-350">Metas Ativas no Momento</h4>
+                  <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">Metas Ativas no Momento</h4>
 
                   <div className="overflow-hidden rounded-xl border border-pink-200 dark:border-slate-800">
                     <table className="w-full text-left border-collapse">
@@ -1502,10 +1736,10 @@ export default function App() {
                               <td className="p-3 font-bold text-slate-800 dark:text-slate-200">
                                 {getCategoryIcon(meta.categoria)} {meta.categoria}
                               </td>
-                              <td className="p-3 font-semibold text-slate-700 dark:text-slate-350">
+                              <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
                                 {formatCurrency(meta.valor_meta)}
                               </td>
-                              <td className="p-3 text-slate-600 dark:text-slate-400 text-xs italic">
+                              <td className="p-3 text-slate-600 dark:text-slate-400 text-xs italic max-w-[200px] truncate" title={meta.descricao}>
                                 {meta.descricao || <span className="text-slate-400 dark:text-slate-600">Sem descrição</span>}
                               </td>
                               <td className="p-3 text-center">
@@ -1583,7 +1817,7 @@ export default function App() {
               {/* Valor e Tipo */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-550 dark:text-slate-450 block">Tipo</label>
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Tipo</label>
                   <div className="grid grid-cols-2 gap-2 bg-pink-200/50 dark:bg-slate-800 p-1 rounded-xl">
                     <button
                       type="button"
@@ -1609,14 +1843,14 @@ export default function App() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-550 dark:text-slate-450 block">Valor (R$)</label>
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Valor (R$)</label>
                   <input
                     type="text"
                     required
                     value={formValor}
                     onChange={(e) => setFormValor(e.target.value)}
                     placeholder="0,00"
-                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-955 dark:text-white font-bold outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20"
+                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-955 dark:text-white font-bold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
                   />
                 </div>
               </div>
@@ -1624,11 +1858,11 @@ export default function App() {
               {/* Categorias e Subcategoria */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-550 dark:text-slate-450 block">Categoria</label>
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Categoria</label>
                   <select
                     value={formCategoria}
                     onChange={(e) => setFormCategoria(e.target.value)}
-                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-semibold outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20"
+                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-semibold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
                   >
                     {categoriasValidas.map(c => (
                       <option key={c} value={c}>
@@ -1639,25 +1873,25 @@ export default function App() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-550 dark:text-slate-450 block">Subcategoria / Detalhe</label>
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Subcategoria / Detalhe</label>
                   <input
                     type="text"
                     value={formSubcategoria}
                     onChange={(e) => setFormSubcategoria(e.target.value)}
                     placeholder="Ex: Cinema, Supermercado"
-                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-955 dark:text-white outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20"
+                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-955 dark:text-white outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
                   />
                 </div>
               </div>
 
-              {/* Quem Pagou e Data Referência */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Quem Pagou, Data Referência e Recorrência */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-550 dark:text-slate-450 block">Quem Pagou / Recebeu</label>
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Quem Pagou / Recebeu</label>
                   <select
                     value={formQuemPagou}
                     onChange={(e) => setFormQuemPagou(e.target.value)}
-                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-semibold outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20"
+                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-semibold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
                   >
                     <option value="Felipe">Felipe</option>
                     <option value="Thaís">Thaís</option>
@@ -1665,20 +1899,42 @@ export default function App() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-550 dark:text-slate-450 block">Data do Lançamento</label>
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Data do Lançamento</label>
                   <input
                     type="date"
                     required
                     value={formDataReferencia}
                     onChange={(e) => setFormDataReferencia(e.target.value)}
-                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20"
+                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
                   />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Recorrência</label>
+                  <select
+                    value={formRecorrencia}
+                    onChange={(e) => setFormRecorrencia(parseInt(e.target.value, 10))}
+                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-bold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
+                  >
+                    <option value={1}>1x (Única)</option>
+                    <option value={2}>2x (Parcelado/Recorrente)</option>
+                    <option value={3}>3x</option>
+                    <option value={4}>4x</option>
+                    <option value={5}>5x</option>
+                    <option value={6}>6x</option>
+                    <option value={7}>7x</option>
+                    <option value={8}>8x</option>
+                    <option value={9}>9x</option>
+                    <option value={10}>10x</option>
+                    <option value={11}>11x</option>
+                    <option value={12}>12x (Recorrência Anual)</option>
+                  </select>
                 </div>
               </div>
 
               {/* Status */}
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-550 dark:text-slate-450 block">Status do Pagamento</label>
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Status do Pagamento</label>
                 <div className="grid grid-cols-2 gap-2 bg-pink-200/50 dark:bg-slate-800 p-1 rounded-xl">
                   <button
                     type="button"
@@ -1733,7 +1989,7 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
           >
             {/* Cabeçalho */}
-            <div className="p-6 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-slate-850 dark:to-slate-900 text-white flex justify-between items-center">
+            <div className="p-6 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-slate-900 dark:to-slate-950 text-white flex justify-between items-center">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-white/10 rounded-lg">
                   <Wallet className="h-5 w-5 text-pink-100 dark:text-amber-400" />
@@ -1750,7 +2006,6 @@ export default function App() {
                 Fechar
               </button>
             </div>
-
             {/* Conteúdo rolável */}
             <div className="p-6 overflow-y-auto space-y-6 flex-1 text-slate-800 dark:text-slate-100">
 
@@ -1770,7 +2025,7 @@ export default function App() {
                         value={formPoupancaTotal}
                         onChange={(e) => setFormPoupancaTotal(e.target.value)}
                         placeholder="Ex: 15000,00"
-                        className="w-full bg-pink-50 dark:bg-slate-900 border border-pink-200/60 dark:border-slate-850 rounded-xl pl-9 pr-4 py-2 text-sm text-pink-955 dark:text-white font-bold outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20"
+                        className="w-full bg-pink-50 dark:bg-slate-900 border border-pink-200/60 dark:border-slate-800 rounded-xl pl-9 pr-4 py-2 text-sm text-pink-955 dark:text-white font-bold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
                       />
                     </div>
                   </div>
@@ -1786,9 +2041,9 @@ export default function App() {
               {/* Barra de Distribuição de Alocação */}
               <div className="space-y-2">
                 <div className="flex justify-between text-xs font-bold">
-                  <span className="text-slate-700 dark:text-slate-350">Alocação por Motivos</span>
+                  <span className="text-slate-700 dark:text-slate-300">Alocação por Motivos</span>
                   <span className="text-slate-500">
-                    {formatCurrency(totalAlocado)} / <span className="text-slate-700 dark:text-slate-350">{formatCurrency(totalGuardado)}</span>
+                    {formatCurrency(totalAlocado)} / <span className="text-slate-700 dark:text-slate-300">{formatCurrency(totalGuardado)}</span>
                   </span>
                 </div>
 
@@ -1827,7 +2082,7 @@ export default function App() {
               </div>
 
               {/* Formulário 2: Adicionar Motivo */}
-              <form onSubmit={handleSavePoupancaMotivo} className="space-y-4 p-4 bg-pink-200/20 dark:bg-slate-955/40 rounded-2xl border border-pink-200/50 dark:border-slate-800/40">
+              <form onSubmit={handleSavePoupancaMotivo} className="space-y-4 p-4 bg-pink-200/20 dark:bg-slate-950/40 rounded-2xl border border-pink-200/50 dark:border-slate-800/40">
                 <h4 className="text-xs font-bold text-pink-900 dark:text-amber-400">2. Criar / Atualizar Motivo</h4>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1839,7 +2094,7 @@ export default function App() {
                       value={formPoupancaMotivoNome}
                       onChange={(e) => setFormPoupancaMotivoNome(e.target.value)}
                       placeholder="Ex: Reserva de Emergência, Viagem..."
-                      className="w-full bg-pink-50 dark:bg-slate-900 border border-pink-200/60 dark:border-slate-850 rounded-xl px-3 py-2 text-sm text-pink-955 dark:text-white font-medium outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20"
+                      className="w-full bg-pink-50 dark:bg-slate-900 border border-pink-200/60 dark:border-slate-800 rounded-xl px-3 py-2 text-sm text-pink-955 dark:text-white font-medium outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
                     />
                   </div>
 
@@ -1855,7 +2110,7 @@ export default function App() {
                         value={formPoupancaMotivoValor}
                         onChange={(e) => setFormPoupancaMotivoValor(e.target.value)}
                         placeholder="Ex: 5000,00"
-                        className="w-full bg-pink-50 dark:bg-slate-900 border border-pink-200/60 dark:border-slate-850 rounded-xl pl-9 pr-4 py-2 text-sm text-pink-955 dark:text-white font-bold outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20"
+                        className="w-full bg-pink-50 dark:bg-slate-900 border border-pink-200/60 dark:border-slate-800 rounded-xl pl-9 pr-4 py-2 text-sm text-pink-955 dark:text-white font-bold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
                       />
                     </div>
                   </div>
@@ -1878,8 +2133,8 @@ export default function App() {
 
               {/* Lista de Motivos Ativos */}
               <div className="space-y-2">
-                <h4 className="text-xs font-bold text-slate-600 dark:text-slate-350">Motivos Cadastrados</h4>
-                <div className="border border-pink-200/50 dark:border-slate-850/60 rounded-2xl overflow-hidden">
+                <h4 className="text-xs font-bold text-slate-600 dark:text-slate-300">Motivos Cadastrados</h4>
+                <div className="border border-pink-200/50 dark:border-slate-800/60 rounded-2xl overflow-hidden">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
                       <tr className="bg-pink-200/30 dark:bg-slate-900/60 text-pink-700 dark:text-amber-400 font-bold border-b border-pink-200 dark:border-slate-800">
@@ -1892,8 +2147,8 @@ export default function App() {
                       {motivosPoupanca.length > 0 ? (
                         motivosPoupanca.map(p => (
                           <tr key={p.id} className="hover:bg-pink-200/10 dark:hover:bg-slate-900/30 transition-colors">
-                            <td className="p-3 font-semibold text-slate-800 dark:text-slate-200">{p.motivo}</td>
-                            <td className="p-3 font-bold text-slate-700 dark:text-slate-350">{formatCurrency(p.valor)}</td>
+                            <td className="p-3 font-semibold text-slate-800 dark:text-slate-200 max-w-[150px] truncate" title={p.motivo}>{p.motivo}</td>
+                            <td className="p-3 font-bold text-slate-700 dark:text-slate-300">{formatCurrency(p.valor)}</td>
                             <td className="p-3 text-center">
                               <div className="flex items-center justify-center gap-2">
                                 <button
