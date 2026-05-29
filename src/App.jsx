@@ -14,6 +14,7 @@ import {
   Clock,
   Trash2,
   Edit,
+  Copy,
   SlidersHorizontal,
   RefreshCw,
   Info,
@@ -101,7 +102,9 @@ export default function App() {
     'Investimentos',
     'Alimentação',
     'Educação',
-    'Imprevistos'
+    'Imprevistos',
+    'Salário',
+    'Renda Extra'
   ]
 
   // --- Efeito para Carregar Dados e Aplicar Tema ---
@@ -287,6 +290,25 @@ export default function App() {
     setIsModalOpen(true)
   }
 
+  // --- Função para Iniciar Duplicação (Cópia) de Transação ---
+  const startDuplicateTransaction = (tx) => {
+    setEditingTransactionId(null) // Novo lançamento
+    setFormValor(tx.valor.toString().replace('.', ','))
+    setFormTipo(tx.tipo)
+    setFormCategoria(tx.categoria)
+    setFormSubcategoria(tx.subcategoria)
+    setFormQuemPagou(tx.quem_pagou)
+    setFormStatus(tx.status)
+    
+    const today = new Date()
+    const yyyy = today.getFullYear()
+    const mm = String(today.getMonth() + 1).padStart(2, '0')
+    const dd = String(today.getDate()).padStart(2, '0')
+    setFormDataReferencia(`${yyyy}-${mm}-${dd}`)
+    setFormRecorrencia(1)
+    setIsModalOpen(true)
+  }
+
   // Helper robusto para adicionar meses a uma data YYYY-MM-DD
   const addMonths = (dateStr, monthsToAdd) => {
     if (!dateStr) return dateStr
@@ -391,7 +413,6 @@ export default function App() {
           } else {
             loadData()
           }
-          alert("Lançamento atualizado com sucesso!")
         } catch (err) {
           console.error("Erro ao atualizar no Supabase, atualizando localmente:", err.message)
           alert("Erro no Supabase. Lançamento atualizado localmente.")
@@ -409,7 +430,6 @@ export default function App() {
         const finalTxs = [...localTxs, ...updated]
         setTransactions(finalTxs)
         localStorage.setItem('financas_transactions', JSON.stringify(finalTxs))
-        alert("Lançamento atualizado localmente!")
       }
     } else {
       // Modo Criação com recorrência
@@ -850,6 +870,29 @@ export default function App() {
       }
     }, 0)
 
+  // 5. Cálculos de Disponibilidade de Saldo (Dinheiro Livre para Gastar)
+  const totalDespesasPendentes = activeMonthTransactions
+    .filter(t => t.tipo === 'Despesa' && t.status === 'Pendente')
+    .reduce((sum, t) => sum + t.valor, 0)
+
+  const dinheiroLivre = Math.max(0, dinheiroEmConta - totalDespesasPendentes)
+
+  const getFreeMoneyData = () => {
+    if (dinheiroEmConta >= totalDespesasPendentes) {
+      return [
+        { name: 'Livre para Gastar', value: dinheiroEmConta - totalDespesasPendentes, color: '#10b981' },
+        { name: 'Comprometido (Pendente)', value: totalDespesasPendentes, color: '#f59e0b' }
+      ].filter(d => d.value > 0)
+    } else {
+      return [
+        { name: 'Saldo em Conta', value: dinheiroEmConta, color: '#f59e0b' },
+        { name: 'Déficit (Falta no Saldo)', value: totalDespesasPendentes - dinheiroEmConta, color: '#ef4444' }
+      ].filter(d => d.value > 0)
+    }
+  }
+
+  const freeMoneyData = getFreeMoneyData()
+
   // Formatação de Data DD/MM/AAAA
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
@@ -999,6 +1042,8 @@ export default function App() {
       case 'Alimentação': return '🍲';
       case 'Educação': return '📚';
       case 'Imprevistos': return '⚠️';
+      case 'Salário': return '💵';
+      case 'Renda Extra': return '💸';
       default: return '💰';
     }
   }
@@ -1541,6 +1586,165 @@ export default function App() {
 
             </div>
 
+            {/* --- Novo Layout: Dinheiro Livre e Progresso das Metas --- */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+              {/* Card de Dinheiro Livre (Donut Chart) */}
+              <div className="glass-panel p-6 flex flex-col justify-between">
+                <div>
+                  <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">Disponibilidade do Saldo</h3>
+                  <p className="text-xs text-slate-500 mb-6">Quanto do seu saldo em conta está livre após reservar o valor das contas pendentes do mês</p>
+
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+                    {/* Donut Chart */}
+                    <div className="h-[160px] w-[160px] flex-shrink-0 relative flex items-center justify-center">
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-550 uppercase tracking-wider">Livre</span>
+                        <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400 tracking-tight">
+                          {formatCurrency(dinheiroLivre).split(',')[0]}
+                        </span>
+                      </div>
+                      {freeMoneyData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={freeMoneyData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={55}
+                              outerRadius={75}
+                              paddingAngle={3}
+                              dataKey="value"
+                            >
+                              {freeMoneyData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: theme === 'dark' ? '#1e293b' : '#fdf2f8',
+                                borderColor: theme === 'dark' ? '#475569' : '#fbcfe8',
+                                color: theme === 'dark' ? '#f8fafc' : '#831843',
+                                borderRadius: '12px',
+                                fontSize: '12px',
+                                fontWeight: 'bold',
+                              }}
+                              formatter={(val) => [formatCurrency(val)]}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="h-full w-full flex items-center justify-center text-xs text-slate-550 italic">
+                          Sem dados
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Legenda detalhada */}
+                    <div className="space-y-3 flex-1 w-full text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="flex items-center gap-2 text-slate-655 dark:text-slate-400">
+                          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+                          Livre para Gastar
+                        </span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">
+                          {formatCurrency(dinheiroLivre)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="flex items-center gap-2 text-slate-655 dark:text-slate-400">
+                          <span className="h-2.5 w-2.5 rounded-full bg-amber-500"></span>
+                          Contas Pendentes
+                        </span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">
+                          {formatCurrency(totalDespesasPendentes)}
+                        </span>
+                      </div>
+                      {dinheiroEmConta < totalDespesasPendentes && (
+                        <div className="flex justify-between items-center">
+                          <span className="flex items-center gap-2 text-rose-500">
+                            <span className="h-2.5 w-2.5 rounded-full bg-rose-500"></span>
+                            Déficit (Falta)
+                          </span>
+                          <span className="font-bold text-rose-605 dark:text-rose-400">
+                            {formatCurrency(totalDespesasPendentes - dinheiroEmConta)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 border-t border-pink-200 dark:border-amber-500/20 pt-4 flex justify-between items-center text-xs">
+                  <span className="text-slate-555 dark:text-slate-450 font-medium">Saldo Total em Conta:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-300">{formatCurrency(dinheiroEmConta)}</span>
+                </div>
+              </div>
+
+              {/* Card de Progresso das Metas (Progress Bars) */}
+              <div className="glass-panel p-6 lg:col-span-2 flex flex-col justify-between">
+                <div>
+                  <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">Acompanhamento do Orçamento</h3>
+                  <p className="text-xs text-slate-500 mb-6">Comparação do total gasto real no mês contra os limites (metas) estabelecidos</p>
+
+                  <div className="space-y-4 max-h-[220px] overflow-y-auto pr-1">
+                    {metas.length > 0 ? (
+                      metas.map(meta => {
+                        // Calcula consumo real para a categoria no mês selecionado
+                        const spent = activeMonthTransactions
+                          .filter(t => t.categoria === meta.categoria && t.tipo === 'Despesa')
+                          .reduce((sum, t) => sum + t.valor, 0)
+                        const pct = meta.valor_meta > 0 ? (spent / meta.valor_meta) * 100 : 0
+
+                        return (
+                          <div key={meta.id} className="space-y-1.5">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="font-bold text-slate-705 dark:text-slate-300 flex items-center gap-1.5">
+                                <span>{getCategoryIcon(meta.categoria)}</span>
+                                {meta.categoria}
+                              </span>
+                              <span className="text-slate-500 font-semibold">
+                                <span className="font-bold text-slate-705 dark:text-slate-200">{formatCurrency(spent)}</span>
+                                <span className="mx-1">/</span>
+                                {formatCurrency(meta.valor_meta)}
+                                <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold ${pct >= 100 ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-400' : 'bg-pink-100 text-pink-800 dark:bg-slate-850 dark:text-slate-300'}`}>
+                                  {pct.toFixed(0)}%
+                                </span>
+                              </span>
+                            </div>
+                            <div className={`w-full h-2 rounded-full overflow-hidden ${getProgressBgColor(pct)}`}>
+                              <div
+                                className={`h-full transition-all duration-550 ${getProgressBarColor(pct)}`}
+                                style={{ width: `${Math.min(100, pct)}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    ) : (
+                      <div className="py-8 text-center">
+                        <p className="text-sm text-slate-500 italic">Nenhuma meta configurada ainda.</p>
+                        <button
+                          onClick={() => setActiveTab('metas')}
+                          className="mt-2 text-xs font-bold text-pink-600 hover:text-pink-700 dark:text-amber-400 dark:hover:text-amber-500 underline"
+                        >
+                          Ir para Configurações de Metas
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-6 border-t border-pink-200 dark:border-amber-500/20 pt-4 flex justify-between items-center text-xs">
+                  <span className="text-slate-555 dark:text-slate-450 font-medium">Orçamento Total Planejado:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-300">
+                    {formatCurrency(metas.reduce((sum, m) => sum + m.valor_meta, 0))}
+                  </span>
+                </div>
+              </div>
+
+            </div>
+
             {/* --- Seção de Transações Recentes --- */}
             <div className="glass-panel p-6">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
@@ -1665,6 +1869,13 @@ export default function App() {
                                 title="Editar Lançamento"
                               >
                                 <Edit className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => startDuplicateTransaction(tx)}
+                                className="p-1.5 text-slate-400 hover:text-pink-650 dark:hover:text-amber-400 rounded-lg hover:bg-pink-100/60 dark:hover:bg-slate-800 transition-all active:scale-90"
+                                title="Copiar Lançamento"
+                              >
+                                <Copy className="h-4 w-4" />
                               </button>
                               <button
                                 onClick={() => handleDeleteTransaction(tx.id)}
@@ -1839,6 +2050,13 @@ export default function App() {
                                 <Edit className="h-4 w-4" />
                               </button>
                               <button
+                                onClick={() => startDuplicateTransaction(tx)}
+                                className="p-1.5 text-slate-400 hover:text-pink-600 dark:hover:text-amber-400 rounded-lg transition-all"
+                                title="Copiar Lançamento"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </button>
+                              <button
                                 onClick={() => handleDeleteTransaction(tx.id)}
                                 className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-450 rounded-lg transition-all"
                                 title="Excluir Lançamento"
@@ -1894,7 +2112,7 @@ export default function App() {
             {/* Card de Configuração de Meta */}
             <div className="glass-panel p-6">
               <div className="flex items-center gap-3 mb-4">
-                <div className="p-2.5 bg-pink-100 dark:bg-amber-955/40 text-pink-700 dark:text-amber-400 rounded-xl">
+                <div className="p-2.5 bg-pink-100 dark:bg-slate-800 rounded-xl text-pink-650 dark:text-amber-400 shadow-inner">
                   <SlidersHorizontal className="h-5 w-5" />
                 </div>
                 <div>
