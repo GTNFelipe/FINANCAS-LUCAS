@@ -124,7 +124,7 @@ export default function App() {
 
     if (lastChecked && lastChecked !== todayStr) {
       const recurrenceRegex = /\(\d+\/\d+\)/
-      
+
       const txsToUpdate = loadedTxs.filter(t => {
         const isCurrentMonth = t.data_referencia.substring(0, 7) === todayStr
         const isRecurring = recurrenceRegex.test(t.subcategoria)
@@ -134,7 +134,7 @@ export default function App() {
 
       if (txsToUpdate.length > 0) {
         const updatedIds = new Set(txsToUpdate.map(t => t.id))
-        
+
         // Atualizar estado
         setTransactions(prev => prev.map(t => {
           if (updatedIds.has(t.id)) {
@@ -1412,8 +1412,8 @@ export default function App() {
                                 type="button"
                                 onClick={() => toggleTransactionStatus(tx)}
                                 className={`p-1.5 rounded-lg transition-all active:scale-95 cursor-pointer hover:bg-pink-100/60 dark:hover:bg-slate-800 ${tx.status === 'Pago'
-                                    ? 'text-emerald-600 dark:text-emerald-400'
-                                    : 'text-rose-600 dark:text-rose-400'
+                                  ? 'text-emerald-600 dark:text-emerald-400'
+                                  : 'text-rose-600 dark:text-rose-400'
                                   }`}
                                 title="Alternar Status (Pago/Pendente)"
                               >
@@ -1592,8 +1592,8 @@ export default function App() {
                                 type="button"
                                 onClick={() => toggleTransactionStatus(tx)}
                                 className={`p-1.5 rounded-lg transition-all active:scale-95 cursor-pointer hover:bg-pink-100/60 dark:hover:bg-slate-800 ${tx.status === 'Pago'
-                                    ? 'text-emerald-600 dark:text-emerald-400'
-                                    : 'text-rose-600 dark:text-rose-400'
+                                  ? 'text-emerald-600 dark:text-emerald-400'
+                                  : 'text-rose-600 dark:text-rose-400'
                                   }`}
                                 title="Alternar Status (Pago/Pendente)"
                               >
