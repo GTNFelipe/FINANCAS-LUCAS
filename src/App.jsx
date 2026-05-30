@@ -1765,14 +1765,14 @@ export default function App() {
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">Alimentação & Refeição</h3>
-                    <div className="p-2.5 bg-orange-100 dark:bg-orange-955/40 rounded-xl text-orange-600 dark:text-orange-450 shadow-inner">
+                    <div className="p-2.5 bg-pink-100 dark:bg-orange-950/30 rounded-xl text-pink-600 dark:text-orange-400 shadow-inner">
                       <CreditCard className="h-4.5 w-4.5" />
                     </div>
                   </div>
 
                   <div className="mb-6">
                     <span className="text-xs font-semibold text-slate-500">Saldo Restante Flexível</span>
-                    <h4 className={`text-3xl font-black mt-1 tracking-tight ${saldoRestanteVRVA >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-600 dark:text-rose-455'}`}>
+                    <h4 className={`text-3xl font-black mt-1 tracking-tight ${saldoRestanteVRVA >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-600 dark:text-rose-400'}`}>
                       {formatCurrency(saldoRestanteVRVA)}
                     </h4>
                   </div>
@@ -1783,11 +1783,11 @@ export default function App() {
                     <div className="space-y-1.5">
                       <div className="flex justify-between text-xs font-bold">
                         <span className="text-slate-705 dark:text-slate-300">Uso do Limite Mensal</span>
-                        <span className="text-slate-500">{pctVRVA.toFixed(0)}%</span>
+                        <span className="text-slate-550">{pctVRVA.toFixed(0)}%</span>
                       </div>
-                      <div className="w-full bg-orange-50 dark:bg-orange-950/20 h-2.5 rounded-full overflow-hidden border border-orange-100/50 dark:border-orange-900/10">
+                      <div className="w-full bg-pink-50 dark:bg-orange-950/20 h-2.5 rounded-full overflow-hidden border border-pink-100/50 dark:border-orange-900/10">
                         <div
-                          className="h-full bg-gradient-to-r from-orange-400 to-orange-600 transition-all duration-550"
+                          className="h-full bg-gradient-to-r from-pink-400 to-pink-600 dark:from-orange-400 dark:to-orange-600 transition-all duration-550"
                           style={{ width: `${Math.min(100, pctVRVA)}%` }}
                         ></div>
                       </div>
