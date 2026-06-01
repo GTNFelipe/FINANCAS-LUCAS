@@ -1290,6 +1290,31 @@ export default function App() {
       }
     }, 0)
 
+  // Saldo em Carteira Individual
+  const dinheiroEmContaFelipe = transactions
+    .filter(t => t.status === 'Pago' && t.categoria !== 'Vale Alimentação/Refeição' && t.quem_pagou === 'Felipe')
+    .reduce((sum, t) => {
+      if (t.tipo === 'Receita') {
+        return sum + t.valor
+      } else {
+        return sum - t.valor
+      }
+    }, 0)
+
+  const dinheiroEmContaThais = transactions
+    .filter(t => t.status === 'Pago' && t.categoria !== 'Vale Alimentação/Refeição' && (t.quem_pagou === 'Thaís' || t.quem_pagou === 'Thais'))
+    .reduce((sum, t) => {
+      if (t.tipo === 'Receita') {
+        return sum + t.valor
+      } else {
+        return sum - t.valor
+      }
+    }, 0)
+
+  const showSplitBar = dinheiroEmContaFelipe > 0 && dinheiroEmContaThais > 0
+  const totalCarteiras = Math.abs(dinheiroEmContaFelipe) + Math.abs(dinheiroEmContaThais)
+  const pctFelipe = totalCarteiras > 0 ? (Math.max(0, dinheiroEmContaFelipe) / totalCarteiras) * 100 : 50
+
   // 5. Cálculos de Disponibilidade de Saldo (Dinheiro Livre para Gastar)
   const totalDespesasPendentes = activeMonthCashTransactions
     .filter(t => t.tipo === 'Despesa' && t.status === 'Pendente')
@@ -1521,10 +1546,16 @@ export default function App() {
 
             {/* Avatares Felipe / Thaís */}
             <div className="flex -space-x-2">
-              <span className="inline-flex items-center justify-center h-8 w-8 rounded-full ring-2 ring-white dark:ring-slate-900 bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 text-xs font-bold" title="Espaço Felipe">
+              <span
+                className="inline-flex items-center justify-center h-8 w-8 rounded-full ring-2 ring-white dark:ring-slate-900 bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 text-xs font-bold"
+                title={`Espaço Felipe • Saldo: ${formatCurrency(dinheiroEmContaFelipe)}`}
+              >
                 F
               </span>
-              <span className="inline-flex items-center justify-center h-8 w-8 rounded-full ring-2 ring-white dark:ring-slate-900 bg-pink-100 text-pink-700 dark:bg-pink-950 dark:text-pink-300 text-xs font-bold" title="Espaço Thaís">
+              <span
+                className="inline-flex items-center justify-center h-8 w-8 rounded-full ring-2 ring-white dark:ring-slate-900 bg-pink-100 text-pink-700 dark:bg-pink-950 dark:text-pink-300 text-xs font-bold"
+                title={`Espaço Thaís • Saldo: ${formatCurrency(dinheiroEmContaThais)}`}
+              >
                 T
               </span>
             </div>
@@ -1641,8 +1672,49 @@ export default function App() {
                   <Check className="h-3 w-3 text-emerald-500" />
                   Saldo Líquido Pago
                 </div>
+
+                {/* Divisor e Saldos Individuais */}
+                <div className="mt-4 pt-3 border-t border-pink-200/50 dark:border-slate-800/80 space-y-2">
+                  <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-amber-500 flex-shrink-0"></span>
+                      <div>
+                        <span className="text-slate-500 dark:text-slate-400 block text-[10px] font-medium uppercase tracking-wider">Felipe</span>
+                        <span className={`text-sm font-extrabold ${dinheiroEmContaFelipe >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-650 dark:text-rose-405'}`}>
+                          {formatCurrency(dinheiroEmContaFelipe)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-end gap-1.5 text-right">
+                      <div>
+                        <span className="text-slate-500 dark:text-slate-400 block text-[10px] font-medium uppercase tracking-wider">Thaís</span>
+                        <span className={`text-sm font-extrabold ${dinheiroEmContaThais >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-650 dark:text-rose-405'}`}>
+                          {formatCurrency(dinheiroEmContaThais)}
+                        </span>
+                      </div>
+                      <span className="h-2 w-2 rounded-full bg-pink-500 flex-shrink-0"></span>
+                    </div>
+                  </div>
+
+                  {/* Barra de Proporção do Saldo */}
+                  {showSplitBar && (
+                    <div className="w-full bg-pink-100/50 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden flex" title="Proporção do saldo na carteira de cada um">
+                      <div
+                        className="h-full bg-amber-500 dark:bg-amber-450 transition-all duration-500"
+                        style={{ width: `${pctFelipe}%` }}
+                        title={`Felipe: ${formatCurrency(dinheiroEmContaFelipe)} (${pctFelipe.toFixed(0)}%)`}
+                      ></div>
+                      <div
+                        className="h-full bg-pink-500 dark:bg-pink-400 transition-all duration-500"
+                        style={{ width: `${100 - pctFelipe}%` }}
+                        title={`Thaís: ${formatCurrency(dinheiroEmContaThais)} (${(100 - pctFelipe).toFixed(0)}%)`}
+                      ></div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Efeito decorativo */}
-                <div className="absolute right-0 bottom-0 h-16 w-16 bg-pink-500/5 rounded-full blur-xl translate-x-4 translate-y-4"></div>
+                <div className="absolute right-0 bottom-0 h-16 w-16 bg-pink-500/5 rounded-full blur-xl translate-x-4 translate-y-4 pointer-events-none"></div>
               </div>
 
               {/* Card 2: Receita Total */}
