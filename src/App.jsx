@@ -278,6 +278,78 @@ export default function App() {
     if (isSupabaseConfigured) {
       setIsSyncing(true)
       try {
+        // --- 1. Sincronização Inteligente de Lançamentos Offline ---
+        const savedTxs = localStorage.getItem('financas_transactions');
+        let localOfflineTxs = [];
+        if (savedTxs) {
+          try {
+            const parsed = JSON.parse(savedTxs);
+            localOfflineTxs = parsed.filter(t => t.id && t.id.toString().startsWith('tx-'));
+          } catch (e) {
+            console.error("Erro ao ler LocalStorage para sync:", e);
+          }
+        }
+
+        if (localOfflineTxs.length > 0) {
+          console.log(`Sincronizando ${localOfflineTxs.length} transação(ões) offline para o Supabase...`);
+
+          const rendaExtraTxs = localOfflineTxs.filter(t => t.categoria === 'Renda Extra' && t.tipo === 'Receita');
+          const outrasTxs = localOfflineTxs.filter(t => !(t.categoria === 'Renda Extra' && t.tipo === 'Receita'));
+
+          const idMap = {};
+          const formatDateBR = (dateStr) => {
+            if (!dateStr) return '';
+            const parts = dateStr.split('-');
+            return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : dateStr;
+          };
+
+          if (rendaExtraTxs.length > 0) {
+            const txsToInsert = rendaExtraTxs.map(({ id, criado_em, ...rest }) => ({
+              ...rest,
+              criado_em: criado_em || new Date().toISOString()
+            }));
+            const { data: insertedRenda, error: insertError } = await supabase
+              .from('transacoes')
+              .insert(txsToInsert)
+              .select();
+
+            if (!insertError && insertedRenda) {
+              rendaExtraTxs.forEach((origTx, idx) => {
+                if (insertedRenda[idx]) {
+                  idMap[origTx.id] = insertedRenda[idx].id;
+                }
+              });
+            } else if (insertError) {
+              console.error("Erro ao sincronizar Renda Extra:", insertError.message);
+            }
+          }
+
+          const outrasTxsToInsert = outrasTxs.map(({ id, criado_em, ...rest }) => {
+            let subcat = rest.subcategoria || '';
+            Object.keys(idMap).forEach(oldId => {
+              if (subcat.includes(`[Ref: ${oldId}]`)) {
+                subcat = subcat.replace(`[Ref: ${oldId}]`, `[Ref: ${idMap[oldId]}]`);
+              }
+            });
+            return {
+              ...rest,
+              subcategoria: subcat,
+              criado_em: criado_em || new Date().toISOString()
+            };
+          });
+
+          if (outrasTxsToInsert.length > 0) {
+            const { error: insertError } = await supabase
+              .from('transacoes')
+              .insert(outrasTxsToInsert);
+
+            if (insertError) {
+              console.error("Erro ao sincronizar demais transações:", insertError.message);
+            }
+          }
+        }
+
+        // --- 2. Busca e Atualização do Estado ---
         // Buscar transações
         const { data: txData, error: txError } = await supabase
           .from('transacoes')
@@ -297,6 +369,10 @@ export default function App() {
         setMetas(metasData || [])
         setDbStatus('supabase_connected')
 
+        // Atualizar cache local
+        localStorage.setItem('financas_transactions', JSON.stringify(txData || []));
+        localStorage.setItem('financas_metas', JSON.stringify(metasData || []));
+
         // Buscar poupanças com tratamento resiliente individual
         try {
           const { data: poupancaData, error: poupancaError } = await supabase
@@ -304,6 +380,7 @@ export default function App() {
             .select('*')
           if (poupancaError) throw poupancaError
           setPoupancas(poupancaData || [])
+          localStorage.setItem('financas_poupanca', JSON.stringify(poupancaData || []));
         } catch (pPerr) {
           console.warn("Tabela 'poupancas' nao encontrada no Supabase. Carregando dados locais:", pPerr.message)
           const savedPoupancas = localStorage.getItem('financas_poupanca')
@@ -332,7 +409,7 @@ export default function App() {
   // --- Função para Iniciar Edição de Transação ---
   const startEditTransaction = (tx) => {
     setEditingTransactionId(tx.id)
-    setFormValor(tx.valor.toString().replace('.', ','))
+    setFormValor(Number(tx.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
     setFormTipo(tx.tipo)
     setFormCategoria(tx.categoria)
     setFormSubcategoria(tx.subcategoria)
@@ -346,7 +423,7 @@ export default function App() {
   // --- Função para Iniciar Duplicação (Cópia) de Transação ---
   const startDuplicateTransaction = (tx) => {
     setEditingTransactionId(null) // Novo lançamento
-    setFormValor(tx.valor.toString().replace('.', ','))
+    setFormValor(Number(tx.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
     setFormTipo(tx.tipo)
     setFormCategoria(tx.categoria)
     setFormSubcategoria(tx.subcategoria)
@@ -459,10 +536,62 @@ export default function App() {
           }
 
           if (updateData && updateData.length > 0) {
+            const updatedTx = updateData[0];
+            
+            // Sync Dízimo in Supabase
+            const isRendaExtra = updatedTx.categoria === 'Renda Extra' && updatedTx.tipo === 'Receita';
+            const refString = `[Ref: ${editingTransactionId}]`;
+            const existingDizimo = transactions.find(t => t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString));
+            
+            let finalDizimo = null;
+            if (isRendaExtra) {
+              const targetDizimo = {
+                data_referencia: updatedTx.data_referencia,
+                tipo: 'Despesa',
+                categoria: 'Dízimo',
+                subcategoria: `Dízimo 10% - Renda Extra (${formatDate(updatedTx.data_referencia)}) ${refString}`,
+                valor: updatedTx.valor * 0.1,
+                quem_pagou: updatedTx.quem_pagou,
+                status: updatedTx.status
+              };
+              
+              if (existingDizimo) {
+                const { data: dizimoData } = await supabase
+                  .from('transacoes')
+                  .update(targetDizimo)
+                  .eq('id', existingDizimo.id)
+                  .select();
+                if (dizimoData && dizimoData.length > 0) {
+                  finalDizimo = dizimoData[0];
+                }
+              } else {
+                const { data: dizimoData } = await supabase
+                  .from('transacoes')
+                  .insert([{ ...targetDizimo, criado_em: new Date().toISOString() }])
+                  .select();
+                if (dizimoData && dizimoData.length > 0) {
+                  finalDizimo = dizimoData[0];
+                }
+              }
+            } else {
+              if (existingDizimo) {
+                await supabase.from('transacoes').delete().eq('id', existingDizimo.id);
+              }
+            }
+
             setTransactions(prev => {
-              const updatedList = prev.map(t => t.id === editingTransactionId ? updateData[0] : t)
-              return [...insertedData, ...updatedList]
-            })
+              let updatedList = prev.map(t => t.id === editingTransactionId ? updatedTx : t);
+              if (existingDizimo) {
+                if (isRendaExtra && finalDizimo) {
+                  updatedList = updatedList.map(t => t.id === existingDizimo.id ? finalDizimo : t);
+                } else if (!isRendaExtra) {
+                  updatedList = updatedList.filter(t => t.id !== existingDizimo.id);
+                }
+              } else if (isRendaExtra && finalDizimo) {
+                updatedList = [finalDizimo, ...updatedList];
+              }
+              return [...insertedData, ...updatedList];
+            });
           } else {
             loadData()
           }
@@ -471,7 +600,38 @@ export default function App() {
           alert("Erro no Supabase. Lançamento atualizado localmente.")
           const localTxs = extraTxsToInsert.map((tx, idx) => ({ ...tx, id: 'tx-' + (Date.now() + idx + 1) }))
           const updated = transactions.map(t => t.id === editingTransactionId ? { ...t, ...mainTxData } : t)
-          const finalTxs = [...localTxs, ...updated]
+          
+          let finalTxs = [...localTxs, ...updated]
+          // Sync dízimo locally
+          const isRendaExtra = mainTxData.categoria === 'Renda Extra' && mainTxData.tipo === 'Receita';
+          const refString = `[Ref: ${editingTransactionId}]`;
+          const existingDizimo = finalTxs.find(t => t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString));
+          
+          if (isRendaExtra) {
+            const targetDizimo = {
+              data_referencia: mainTxData.data_referencia,
+              tipo: 'Despesa',
+              categoria: 'Dízimo',
+              subcategoria: `Dízimo 10% - Renda Extra (${formatDate(mainTxData.data_referencia)}) ${refString}`,
+              valor: mainTxData.valor * 0.1,
+              quem_pagou: mainTxData.quem_pagou,
+              status: mainTxData.status
+            };
+            if (existingDizimo) {
+              finalTxs = finalTxs.map(t => t.id === existingDizimo.id ? { ...t, ...targetDizimo } : t);
+            } else {
+              const localDizimo = {
+                ...targetDizimo,
+                id: 'tx-dizimo-' + Date.now(),
+                criado_em: new Date().toISOString()
+              };
+              finalTxs = [localDizimo, ...finalTxs];
+            }
+          } else {
+            if (existingDizimo) {
+              finalTxs = finalTxs.filter(t => t.id !== existingDizimo.id);
+            }
+          }
           setTransactions(finalTxs)
           localStorage.setItem('financas_transactions', JSON.stringify(finalTxs))
         } finally {
@@ -480,7 +640,38 @@ export default function App() {
       } else {
         const localTxs = extraTxsToInsert.map((tx, idx) => ({ ...tx, id: 'tx-' + (Date.now() + idx + 1) }))
         const updated = transactions.map(t => t.id === editingTransactionId ? { ...t, ...mainTxData } : t)
-        const finalTxs = [...localTxs, ...updated]
+        
+        let finalTxs = [...localTxs, ...updated]
+        // Sync dízimo locally
+        const isRendaExtra = mainTxData.categoria === 'Renda Extra' && mainTxData.tipo === 'Receita';
+        const refString = `[Ref: ${editingTransactionId}]`;
+        const existingDizimo = finalTxs.find(t => t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString));
+        
+        if (isRendaExtra) {
+          const targetDizimo = {
+            data_referencia: mainTxData.data_referencia,
+            tipo: 'Despesa',
+            categoria: 'Dízimo',
+            subcategoria: `Dízimo 10% - Renda Extra (${formatDate(mainTxData.data_referencia)}) ${refString}`,
+            valor: mainTxData.valor * 0.1,
+            quem_pagou: mainTxData.quem_pagou,
+            status: mainTxData.status
+          };
+          if (existingDizimo) {
+            finalTxs = finalTxs.map(t => t.id === existingDizimo.id ? { ...t, ...targetDizimo } : t);
+          } else {
+            const localDizimo = {
+              ...targetDizimo,
+              id: 'tx-dizimo-' + Date.now(),
+              criado_em: new Date().toISOString()
+            };
+            finalTxs = [localDizimo, ...finalTxs];
+          }
+        } else {
+          if (existingDizimo) {
+            finalTxs = finalTxs.filter(t => t.id !== existingDizimo.id);
+          }
+        }
         setTransactions(finalTxs)
         localStorage.setItem('financas_transactions', JSON.stringify(finalTxs))
       }
@@ -518,7 +709,33 @@ export default function App() {
           if (error) throw error
 
           if (data && data.length > 0) {
-            setTransactions(prev => [...data, ...prev])
+            // Generate dizimo for Supabase
+            const dizimoTxs = data
+              .filter(t => t.categoria === 'Renda Extra' && t.tipo === 'Receita')
+              .map(t => ({
+                criado_em: new Date().toISOString(),
+                data_referencia: t.data_referencia,
+                tipo: 'Despesa',
+                categoria: 'Dízimo',
+                subcategoria: `Dízimo 10% - Renda Extra (${formatDate(t.data_referencia)}) [Ref: ${t.id}]`,
+                valor: t.valor * 0.1,
+                quem_pagou: t.quem_pagou,
+                status: t.status
+              }))
+
+            if (dizimoTxs.length > 0) {
+              const { data: dizimoData, error: dizimoError } = await supabase
+                .from('transacoes')
+                .insert(dizimoTxs)
+                .select()
+              if (!dizimoError && dizimoData) {
+                setTransactions(prev => [...dizimoData, ...data, ...prev])
+              } else {
+                setTransactions(prev => [...data, ...prev])
+              }
+            } else {
+              setTransactions(prev => [...data, ...prev])
+            }
           } else {
             loadData()
           }
@@ -549,7 +766,23 @@ export default function App() {
 
   const saveTxsLocal = (newTxs) => {
     const localTxs = newTxs.map((tx, idx) => ({ ...tx, id: 'tx-' + (Date.now() + idx) }))
-    const updated = [...localTxs, ...transactions]
+    
+    // Generate dizimo for local
+    const dizimoTxs = localTxs
+      .filter(t => t.categoria === 'Renda Extra' && t.tipo === 'Receita')
+      .map((t, idx) => ({
+        id: 'tx-dizimo-' + (Date.now() + localTxs.length + idx),
+        criado_em: new Date().toISOString(),
+        data_referencia: t.data_referencia,
+        tipo: 'Despesa',
+        categoria: 'Dízimo',
+        subcategoria: `Dízimo 10% - Renda Extra (${formatDate(t.data_referencia)}) [Ref: ${t.id}]`,
+        valor: t.valor * 0.1,
+        quem_pagou: t.quem_pagou,
+        status: t.status
+      }))
+
+    const updated = [...dizimoTxs, ...localTxs, ...transactions]
     setTransactions(updated)
     localStorage.setItem('financas_transactions', JSON.stringify(updated))
   }
@@ -573,7 +806,15 @@ export default function App() {
           .eq('id', id)
 
         if (error) throw error
-        setTransactions(prev => prev.filter(t => t.id !== id))
+
+        // Delete linked dízimo in Supabase
+        const refString = `[Ref: ${id}]`
+        const linkedDizimo = transactions.find(t => t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString))
+        if (linkedDizimo) {
+          await supabase.from('transacoes').delete().eq('id', linkedDizimo.id)
+        }
+
+        setTransactions(prev => prev.filter(t => t.id !== id && (!linkedDizimo || t.id !== linkedDizimo.id)))
       } catch (err) {
         console.error("Erro ao excluir do Supabase, excluindo localmente:", err.message)
         deleteTxLocal(id)
@@ -586,7 +827,8 @@ export default function App() {
   }
 
   const deleteTxLocal = (id) => {
-    const updated = transactions.filter(t => t.id !== id)
+    const refString = `[Ref: ${id}]`
+    const updated = transactions.filter(t => t.id !== id && !(t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString)))
     setTransactions(updated)
     localStorage.setItem('financas_transactions', JSON.stringify(updated))
   }
@@ -605,7 +847,21 @@ export default function App() {
 
         if (error) throw error
 
-        setTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: newStatus } : t))
+        // Toggle linked dízimo status in Supabase
+        const refString = `[Ref: ${tx.id}]`
+        const linkedDizimo = transactions.find(t => t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString))
+        if (linkedDizimo) {
+          await supabase
+            .from('transacoes')
+            .update({ status: newStatus })
+            .eq('id', linkedDizimo.id)
+        }
+
+        setTransactions(prev => prev.map(t => {
+          if (t.id === tx.id) return { ...t, status: newStatus };
+          if (linkedDizimo && t.id === linkedDizimo.id) return { ...t, status: newStatus };
+          return t;
+        }))
       } catch (err) {
         console.error("Erro ao alternar status no Supabase, alterando localmente:", err.message)
         toggleTxStatusLocal(tx.id, newStatus)
@@ -618,7 +874,12 @@ export default function App() {
   }
 
   const toggleTxStatusLocal = (id, newStatus) => {
-    const updated = transactions.map(t => t.id === id ? { ...t, status: newStatus } : t)
+    const refString = `[Ref: ${id}]`
+    const updated = transactions.map(t => {
+      if (t.id === id) return { ...t, status: newStatus };
+      if (t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString)) return { ...t, status: newStatus };
+      return t;
+    })
     setTransactions(updated)
     localStorage.setItem('financas_transactions', JSON.stringify(updated))
   }
@@ -912,6 +1173,111 @@ export default function App() {
 
   // 3. Saldo do Mês
   const saldoLiquido = totalReceita - totalDespesa
+
+  // --- Cálculo de Faturamento Diário Necessário (Dias Úteis / Feriados) ---
+  const getHolidaysForYear = (year) => {
+    const holidays = [
+      `${year}-01-01`, // Confraternização Universal
+      `${year}-04-21`, // Tiradentes
+      `${year}-05-01`, // Dia do Trabalho
+      `${year}-09-07`, // Independência
+      `${year}-10-12`, // Nossa Senhora Aparecida
+      `${year}-11-02`, // Finados
+      `${year}-11-15`, // Proclamação da República
+      `${year}-11-20`, // Consciência Negra
+      `${year}-12-25`  // Natal
+    ];
+
+    const a = year % 19;
+    const b = Math.floor(year / 100);
+    const c = year % 100;
+    const d = Math.floor(b / 4);
+    const e = b % 4;
+    const f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4);
+    const k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const easterMonth = Math.floor((h + l - 7 * m + 114) / 31) - 1;
+    const easterDay = ((h + l - 7 * m + 114) % 31) + 1;
+    const easter = new Date(year, easterMonth, easterDay);
+
+    const formatDate = (date) => {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    };
+
+    const sextaSanta = new Date(easter);
+    sextaSanta.setDate(easter.getDate() - 2);
+    holidays.push(formatDate(sextaSanta));
+
+    const carnavalTerca = new Date(easter);
+    carnavalTerca.setDate(easter.getDate() - 47);
+    holidays.push(formatDate(carnavalTerca));
+
+    const corpusChristi = new Date(easter);
+    corpusChristi.setDate(easter.getDate() + 60);
+    holidays.push(formatDate(corpusChristi));
+
+    return holidays;
+  };
+
+  const getBusinessDaysInfo = (monthStr) => {
+    if (!monthStr) return { total: 0, remaining: 0 };
+    const parts = monthStr.split('-');
+    if (parts.length !== 2) return { total: 0, remaining: 0 };
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1; // 0-indexed
+
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const yearHolidays = getHolidaysForYear(year);
+
+    let total = 0;
+    let remaining = 0;
+
+    const today = new Date();
+    const todayYear = today.getFullYear();
+    const todayMonth = today.getMonth();
+    const todayDate = today.getDate();
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const currentDate = new Date(year, month, d);
+      const dayOfWeek = currentDate.getDay();
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const isHoliday = yearHolidays.includes(dateStr);
+
+      if (!isWeekend && !isHoliday) {
+        total++;
+        if (year === todayYear && month === todayMonth) {
+          if (d >= todayDate) {
+            remaining++;
+          }
+        } else if (year > todayYear || (year === todayYear && month > todayMonth)) {
+          remaining++;
+        }
+      }
+    }
+
+    return { total, remaining };
+  };
+
+  const { total: totalBusinessDays, remaining: remainingBusinessDays } = getBusinessDaysInfo(selectedMonth);
+  const isMonthCurrent = () => {
+    if (!selectedMonth) return false;
+    const [y, m] = selectedMonth.split('-').map(Number);
+    const today = new Date();
+    return y === today.getFullYear() && m === (today.getMonth() + 1);
+  };
+
+  const deficitAmount = Math.max(0, totalDespesa - totalReceita);
+  const dailyNeededTotal = totalBusinessDays > 0 ? deficitAmount / totalBusinessDays : 0;
+  const dailyNeededRemaining = remainingBusinessDays > 0 ? deficitAmount / remainingBusinessDays : 0;
 
   // 4. Dinheiro em Conta (Saldo Pago Acumulado de Todo o Histórico)
   const dinheiroEmConta = transactions
@@ -1343,13 +1709,26 @@ export default function App() {
                     <DollarSign className="h-6 w-6" />
                   </div>
                 </div>
-                <div className="mt-4">
-                  <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${saldoLiquido >= 0
+                <div className="mt-4 flex flex-col gap-2">
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-bold w-fit ${saldoLiquido >= 0
                     ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
                     : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
                     }`}>
                     {saldoLiquido >= 0 ? 'Superavitário' : 'Déficit no Mês'}
                   </span>
+                  {saldoLiquido < 0 && (
+                    <div className="mt-2 text-xs border-t border-pink-200/50 dark:border-slate-800/80 pt-2 space-y-1.5">
+                      <div className="text-[10px] text-slate-500 dark:text-slate-455 font-bold uppercase tracking-wider">Meta Diária (Dias Úteis)</div>
+                      <div className="font-bold text-slate-850 dark:text-slate-200">
+                        {formatCurrency(dailyNeededTotal)} <span className="text-[10px] font-normal text-slate-500">/ dia ({totalBusinessDays} d.ú.)</span>
+                      </div>
+                      {isMonthCurrent() && remainingBusinessDays > 0 && remainingBusinessDays < totalBusinessDays && (
+                        <div className="font-bold text-pink-650 dark:text-amber-400">
+                          {formatCurrency(dailyNeededRemaining)} <span className="text-[10px] font-normal text-slate-500">/ dia rest. ({remainingBusinessDays} d.ú.)</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1415,7 +1794,7 @@ export default function App() {
                     <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">Dinheiro Guardado</h3>
                     <button
                       onClick={() => {
-                        setFormPoupancaTotal(totalGuardado.toString())
+                        setFormPoupancaTotal(totalGuardado > 0 ? Number(totalGuardado).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '')
                         setIsPoupancaModalOpen(true)
                       }}
                       className="p-2.5 bg-pink-100 hover:bg-pink-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl text-pink-600 dark:text-amber-400 shadow-inner transition-colors"
@@ -2314,7 +2693,23 @@ export default function App() {
                           type="text"
                           required
                           value={formMetaValor}
-                          onChange={(e) => setFormMetaValor(e.target.value)}
+                        onChange={(e) => {
+                          const cleanDigits = e.target.value.replace(/\D/g, '');
+                          if (!cleanDigits) {
+                            setFormMetaValor('');
+                            return;
+                          }
+                          const cents = parseInt(cleanDigits, 10);
+                          if (cents === 0) {
+                            setFormMetaValor('');
+                            return;
+                          }
+                          const formatted = (cents / 100).toLocaleString('pt-BR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                          });
+                          setFormMetaValor(formatted);
+                        }}
                           placeholder="Ex: 1000,00"
                           className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl pl-9 pr-4 py-2.5 text-sm text-pink-955 dark:text-white font-bold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
                         />
@@ -2475,7 +2870,23 @@ export default function App() {
                     type="text"
                     required
                     value={formValor}
-                    onChange={(e) => setFormValor(e.target.value)}
+                    onChange={(e) => {
+                      const cleanDigits = e.target.value.replace(/\D/g, '');
+                      if (!cleanDigits) {
+                        setFormValor('');
+                        return;
+                      }
+                      const cents = parseInt(cleanDigits, 10);
+                      if (cents === 0) {
+                        setFormValor('');
+                        return;
+                      }
+                      const formatted = (cents / 100).toLocaleString('pt-BR', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      });
+                      setFormValor(formatted);
+                    }}
                     placeholder="0,00"
                     className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-955 dark:text-white font-bold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
                   />
@@ -2655,7 +3066,23 @@ export default function App() {
                         type="text"
                         required
                         value={formPoupancaTotal}
-                        onChange={(e) => setFormPoupancaTotal(e.target.value)}
+                        onChange={(e) => {
+                          const cleanDigits = e.target.value.replace(/\D/g, '');
+                          if (!cleanDigits) {
+                            setFormPoupancaTotal('');
+                            return;
+                          }
+                          const cents = parseInt(cleanDigits, 10);
+                          if (cents === 0) {
+                            setFormPoupancaTotal('');
+                            return;
+                          }
+                          const formatted = (cents / 100).toLocaleString('pt-BR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                          });
+                          setFormPoupancaTotal(formatted);
+                        }}
                         placeholder="Ex: 15000,00"
                         className="w-full bg-pink-50 dark:bg-slate-900 border border-pink-200/60 dark:border-slate-800 rounded-xl pl-9 pr-4 py-2 text-sm text-pink-955 dark:text-white font-bold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
                       />
@@ -2740,7 +3167,23 @@ export default function App() {
                         type="text"
                         required
                         value={formPoupancaMotivoValor}
-                        onChange={(e) => setFormPoupancaMotivoValor(e.target.value)}
+                        onChange={(e) => {
+                          const cleanDigits = e.target.value.replace(/\D/g, '');
+                          if (!cleanDigits) {
+                            setFormPoupancaMotivoValor('');
+                            return;
+                          }
+                          const cents = parseInt(cleanDigits, 10);
+                          if (cents === 0) {
+                            setFormPoupancaMotivoValor('');
+                            return;
+                          }
+                          const formatted = (cents / 100).toLocaleString('pt-BR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                          });
+                          setFormPoupancaMotivoValor(formatted);
+                        }}
                         placeholder="Ex: 5000,00"
                         className="w-full bg-pink-50 dark:bg-slate-900 border border-pink-200/60 dark:border-slate-800 rounded-xl pl-9 pr-4 py-2 text-sm text-pink-955 dark:text-white font-bold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
                       />
@@ -2803,7 +3246,7 @@ export default function App() {
                                   onClick={() => {
                                     setEditingPoupancaId(p.id)
                                     setFormPoupancaMotivoNome(p.motivo)
-                                    setFormPoupancaMotivoValor(p.valor.toString().replace('.', ','))
+                                    setFormPoupancaMotivoValor(Number(p.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
                                   }}
                                   className="p-1 text-slate-400 hover:text-pink-600 dark:hover:text-amber-450 transition-colors"
                                   title="Editar Motivo"
