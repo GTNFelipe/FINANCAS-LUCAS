@@ -471,11 +471,13 @@ export default function App() {
       return
     }
 
+    const subcategoriaCapitalized = capitalizeWords(formSubcategoria.trim()) || 'Outros'
+
     const txData = {
       data_referencia: formDataReferencia,
       tipo: formTipo,
       categoria: formCategoria,
-      subcategoria: formSubcategoria.trim() || 'Outros',
+      subcategoria: subcategoriaCapitalized,
       valor: valorNum,
       quem_pagou: formQuemPagou,
       status: formStatus
@@ -485,8 +487,8 @@ export default function App() {
       // Modo Edição com suporte a recorrência
       const numRecorrencias = parseInt(formRecorrencia, 10) || 1
       const firstSubcat = numRecorrencias > 1
-        ? `${formSubcategoria.trim() || 'Outros'} (1/${numRecorrencias})`
-        : (formSubcategoria.trim() || 'Outros')
+        ? `${subcategoriaCapitalized} (1/${numRecorrencias})`
+        : subcategoriaCapitalized
 
       const mainTxData = {
         data_referencia: formDataReferencia,
@@ -501,7 +503,7 @@ export default function App() {
       const extraTxsToInsert = []
       for (let i = 1; i < numRecorrencias; i++) {
         const dateRef = addMonths(formDataReferencia, i)
-        const subcat = `${formSubcategoria.trim() || 'Outros'} (${i + 1}/${numRecorrencias})`
+        const subcat = `${subcategoriaCapitalized} (${i + 1}/${numRecorrencias})`
         extraTxsToInsert.push({
           criado_em: new Date().toISOString(),
           data_referencia: dateRef,
@@ -683,8 +685,8 @@ export default function App() {
       for (let i = 0; i < numRecorrencias; i++) {
         const dateRef = addMonths(formDataReferencia, i)
         const subcat = numRecorrencias > 1
-          ? `${formSubcategoria.trim() || 'Outros'} (${i + 1}/${numRecorrencias})`
-          : (formSubcategoria.trim() || 'Outros')
+          ? `${subcategoriaCapitalized} (${i + 1}/${numRecorrencias})`
+          : subcategoriaCapitalized
 
         txsToInsert.push({
           criado_em: new Date().toISOString(),
@@ -1467,6 +1469,18 @@ export default function App() {
     '#6366f1', // Indigo
     '#f97316'  // Laranja
   ]
+
+  // Função para capitalizar a primeira letra de cada palavra e manter o resto em minúsculo
+  const capitalizeWords = (str) => {
+    if (!str) return ''
+    return str
+      .split(' ')
+      .map(word => {
+        if (word.length === 0) return ''
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+      })
+      .join(' ')
+  }
 
   // Função para converter strings formatadas em pt-BR (ex: "1.234,56" ou "1234,56") para número (float)
   const parseBRL = (valueString) => {
@@ -2987,7 +3001,7 @@ export default function App() {
                   <input
                     type="text"
                     value={formSubcategoria}
-                    onChange={(e) => setFormSubcategoria(e.target.value)}
+                    onChange={(e) => setFormSubcategoria(capitalizeWords(e.target.value))}
                     placeholder="Ex: Cinema, Supermercado"
                     className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-955 dark:text-white outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
                   />
