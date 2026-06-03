@@ -19,8 +19,10 @@ import {
   RefreshCw,
   Info,
   ChevronRight,
+  ChevronDown,
   TrendingUp as ProfitIcon,
-  CreditCard
+  CreditCard,
+  ArrowLeftRight
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -65,6 +67,7 @@ export default function App() {
   const [filterPerson, setFilterPerson] = useState('Todos')
   const [filterType, setFilterType] = useState('Todos')
   const [filterStatus, setFilterStatus] = useState('Todos')
+  const [isMonthDropdownOpen, setIsMonthDropdownOpen] = useState(false)
 
   // --- Estados do Formulário de Lançamento ---
   const [formValor, setFormValor] = useState('')
@@ -93,6 +96,20 @@ export default function App() {
   const [formPoupancaMotivoValor, setFormPoupancaMotivoValor] = useState('')
   const [editingPoupancaId, setEditingPoupancaId] = useState(null)
 
+  // --- Estados do Formulário de Transferência ---
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false)
+  const [formTransferValor, setFormTransferValor] = useState('')
+  const [formTransferDe, setFormTransferDe] = useState('Felipe')
+  const [formTransferPara, setFormTransferPara] = useState('Thaís')
+  const [formTransferDesc, setFormTransferDesc] = useState('')
+  const [formTransferData, setFormTransferData] = useState(() => {
+    const today = new Date()
+    const yyyy = today.getFullYear()
+    const mm = String(today.getMonth() + 1).padStart(2, '0')
+    const dd = String(today.getDate()).padStart(2, '0')
+    return `${yyyy}-${mm}-${dd}`
+  })
+
   // Categorias válidas fornecidas pelo usuário
   const categoriasValidas = [
     'Casa',
@@ -107,7 +124,8 @@ export default function App() {
     'Imprevistos',
     'Salário',
     'Renda Extra',
-    'Vale Alimentação/Refeição'
+    'Vale Alimentação/Refeição',
+    'Transferência'
   ]
 
   // --- Efeito para Carregar Dados e Aplicar Tema ---
@@ -191,9 +209,9 @@ export default function App() {
   // Função para verificar e gerar a recarga mensal automática do Vale Alimentação/Refeição Flexível (R$ 1.004,00)
   const checkVRVARecharge = async (loadedTxs, isSupabaseActive) => {
     const currentMonth = getTodayMonthStr() // "YYYY-MM"
-    const hasRecharge = loadedTxs.some(t => 
-      t.categoria === 'Vale Alimentação/Refeição' && 
-      t.tipo === 'Receita' && 
+    const hasRecharge = loadedTxs.some(t =>
+      t.categoria === 'Vale Alimentação/Refeição' &&
+      t.tipo === 'Receita' &&
       t.data_referencia.substring(0, 7) === currentMonth
     )
 
@@ -269,7 +287,7 @@ export default function App() {
     setTransactions(loadedTxs)
     setMetas(loadedMetas)
     setPoupancas(loadedPoupancas)
-    
+
     const txsWithRecharge = await checkVRVARecharge(loadedTxs, false)
     checkMonthTurn(txsWithRecharge, false)
   }
@@ -429,7 +447,7 @@ export default function App() {
     setFormSubcategoria(tx.subcategoria)
     setFormQuemPagou(tx.quem_pagou)
     setFormStatus(tx.status)
-    
+
     const today = new Date()
     const yyyy = today.getFullYear()
     const mm = String(today.getMonth() + 1).padStart(2, '0')
@@ -539,12 +557,12 @@ export default function App() {
 
           if (updateData && updateData.length > 0) {
             const updatedTx = updateData[0];
-            
+
             // Sync Dízimo in Supabase
             const isRendaExtra = updatedTx.categoria === 'Renda Extra' && updatedTx.tipo === 'Receita';
             const refString = `[Ref: ${editingTransactionId}]`;
             const existingDizimo = transactions.find(t => t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString));
-            
+
             let finalDizimo = null;
             if (isRendaExtra) {
               const targetDizimo = {
@@ -556,7 +574,7 @@ export default function App() {
                 quem_pagou: updatedTx.quem_pagou,
                 status: updatedTx.status
               };
-              
+
               if (existingDizimo) {
                 const { data: dizimoData } = await supabase
                   .from('transacoes')
@@ -602,13 +620,13 @@ export default function App() {
           alert("Erro no Supabase. Lançamento atualizado localmente.")
           const localTxs = extraTxsToInsert.map((tx, idx) => ({ ...tx, id: 'tx-' + (Date.now() + idx + 1) }))
           const updated = transactions.map(t => t.id === editingTransactionId ? { ...t, ...mainTxData } : t)
-          
+
           let finalTxs = [...localTxs, ...updated]
           // Sync dízimo locally
           const isRendaExtra = mainTxData.categoria === 'Renda Extra' && mainTxData.tipo === 'Receita';
           const refString = `[Ref: ${editingTransactionId}]`;
           const existingDizimo = finalTxs.find(t => t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString));
-          
+
           if (isRendaExtra) {
             const targetDizimo = {
               data_referencia: mainTxData.data_referencia,
@@ -642,13 +660,13 @@ export default function App() {
       } else {
         const localTxs = extraTxsToInsert.map((tx, idx) => ({ ...tx, id: 'tx-' + (Date.now() + idx + 1) }))
         const updated = transactions.map(t => t.id === editingTransactionId ? { ...t, ...mainTxData } : t)
-        
+
         let finalTxs = [...localTxs, ...updated]
         // Sync dízimo locally
         const isRendaExtra = mainTxData.categoria === 'Renda Extra' && mainTxData.tipo === 'Receita';
         const refString = `[Ref: ${editingTransactionId}]`;
         const existingDizimo = finalTxs.find(t => t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString));
-        
+
         if (isRendaExtra) {
           const targetDizimo = {
             data_referencia: mainTxData.data_referencia,
@@ -768,7 +786,7 @@ export default function App() {
 
   const saveTxsLocal = (newTxs) => {
     const localTxs = newTxs.map((tx, idx) => ({ ...tx, id: 'tx-' + (Date.now() + idx) }))
-    
+
     // Generate dizimo for local
     const dizimoTxs = localTxs
       .filter(t => t.categoria === 'Renda Extra' && t.tipo === 'Receita')
@@ -1141,6 +1159,78 @@ export default function App() {
     localStorage.setItem('financas_poupanca', JSON.stringify(updated))
   }
 
+  // --- Função para Adicionar Transferência entre Felipe e Thaís ---
+  const handleSaveTransfer = async (e) => {
+    e.preventDefault()
+    const valorNum = parseBRL(formTransferValor)
+    if (isNaN(valorNum) || valorNum <= 0) {
+      alert("Por favor, digite um valor válido maior que zero.")
+      return
+    }
+
+    const de = formTransferDe
+    const para = de === 'Felipe' ? 'Thaís' : 'Felipe'
+    const desc = formTransferDesc.trim() ? `: ${formTransferDesc.trim()}` : ''
+
+    const txDe = {
+      criado_em: new Date().toISOString(),
+      data_referencia: formTransferData,
+      tipo: 'Despesa',
+      categoria: 'Transferência',
+      subcategoria: `Envio para ${para}${desc}`,
+      valor: valorNum,
+      quem_pagou: de,
+      status: 'Pago'
+    }
+
+    const txPara = {
+      criado_em: new Date().toISOString(),
+      data_referencia: formTransferData,
+      tipo: 'Receita',
+      categoria: 'Transferência',
+      subcategoria: `Recebido de ${de}${desc}`,
+      valor: valorNum,
+      quem_pagou: para,
+      status: 'Pago'
+    }
+
+    const txsToInsert = [txDe, txPara]
+
+    if (isSupabaseConfigured && dbStatus === 'supabase_connected') {
+      setIsSyncing(true)
+      try {
+        const { data, error } = await supabase
+          .from('transacoes')
+          .insert(txsToInsert)
+          .select()
+
+        if (error) throw error
+
+        if (data && data.length > 0) {
+          setTransactions(prev => [...data, ...prev])
+        } else {
+          loadData()
+        }
+        alert(`Transferência de ${formatCurrency(valorNum)} realizada com sucesso!`)
+      } catch (err) {
+        console.error("Erro ao transferir no Supabase, gravando localmente:", err.message)
+        alert("Erro ao conectar com o Supabase. Transferência salva localmente no navegador.")
+        saveTxsLocal(txsToInsert)
+      } finally {
+        setIsSyncing(false)
+      }
+    } else {
+      saveTxsLocal(txsToInsert)
+      alert(`Transferência de ${formatCurrency(valorNum)} realizada localmente!`)
+    }
+
+    // Resetar campos
+    setFormTransferValor('')
+    setFormTransferDesc('')
+    setIsTransferModalOpen(false)
+  }
+
+
   // --- Cálculos de Poupança (Dinheiro Guardado) ---
   const totalGuardadoItem = poupancas.find(p => p.motivo === 'Total')
   const totalGuardado = totalGuardadoItem ? totalGuardadoItem.valor : 0
@@ -1150,17 +1240,59 @@ export default function App() {
 
   // --- Cálculos Financeiros ---
   const activeMonthTransactions = transactions.filter(t => t.data_referencia.substring(0, 7) === selectedMonth)
-  const activeMonthCashTransactions = activeMonthTransactions.filter(t => t.categoria !== 'Vale Alimentação/Refeição')
+  const activeMonthCashTransactions = activeMonthTransactions.filter(t => t.categoria !== 'Vale Alimentação/Refeição' && t.categoria !== 'Transferência')
 
   // 1. Receita Total do Mês
   const totalReceita = activeMonthCashTransactions
     .filter(t => t.tipo === 'Receita')
     .reduce((sum, t) => sum + t.valor, 0)
 
+  // Receitas detalhadas do mês
+  const receitasPagas = activeMonthCashTransactions
+    .filter(t => t.tipo === 'Receita' && t.status === 'Pago')
+    .reduce((sum, t) => sum + t.valor, 0)
+
+  const receitasPendentes = activeMonthCashTransactions
+    .filter(t => t.tipo === 'Receita' && t.status === 'Pendente')
+    .reduce((sum, t) => sum + t.valor, 0)
+
+  const receitasFelipe = activeMonthCashTransactions
+    .filter(t => t.tipo === 'Receita' && t.quem_pagou === 'Felipe')
+    .reduce((sum, t) => sum + t.valor, 0)
+
+  const receitasThais = activeMonthCashTransactions
+    .filter(t => t.tipo === 'Receita' && (t.quem_pagou === 'Thaís' || t.quem_pagou === 'Thais'))
+    .reduce((sum, t) => sum + t.valor, 0)
+
+  const totalReceitasProporcao = receitasFelipe + receitasThais
+  const pctReceitaFelipe = totalReceitasProporcao > 0 ? (receitasFelipe / totalReceitasProporcao) * 100 : 50
+  const showReceitaSplitBar = receitasFelipe > 0 && receitasThais > 0
+
   // 2. Despesa Total do Mês
   const totalDespesa = activeMonthCashTransactions
     .filter(t => t.tipo === 'Despesa')
     .reduce((sum, t) => sum + t.valor, 0)
+
+  // Despesas detalhadas do mês
+  const despesasPagas = activeMonthCashTransactions
+    .filter(t => t.tipo === 'Despesa' && t.status === 'Pago')
+    .reduce((sum, t) => sum + t.valor, 0)
+
+  const despesasPendentes = activeMonthCashTransactions
+    .filter(t => t.tipo === 'Despesa' && t.status === 'Pendente')
+    .reduce((sum, t) => sum + t.valor, 0)
+
+  const despesasFelipe = activeMonthCashTransactions
+    .filter(t => t.tipo === 'Despesa' && t.quem_pagou === 'Felipe')
+    .reduce((sum, t) => sum + t.valor, 0)
+
+  const despesasThais = activeMonthCashTransactions
+    .filter(t => t.tipo === 'Despesa' && (t.quem_pagou === 'Thaís' || t.quem_pagou === 'Thais'))
+    .reduce((sum, t) => sum + t.valor, 0)
+
+  const totalDespesasProporcao = despesasFelipe + despesasThais
+  const pctDespesaFelipe = totalDespesasProporcao > 0 ? (despesasFelipe / totalDespesasProporcao) * 100 : 50
+  const showDespesaSplitBar = despesasFelipe > 0 && despesasThais > 0
 
   // Reserva de Emergência Inteligência
   const cleanMotivo = (name) => {
@@ -1409,7 +1541,7 @@ export default function App() {
       monthsData[m] = { name: m, Receitas: 0, Despesas: 0 }
     })
 
-    transactions.filter(t => t.categoria !== 'Vale Alimentação/Refeição').forEach(t => {
+    transactions.filter(t => t.categoria !== 'Vale Alimentação/Refeição' && t.categoria !== 'Transferência').forEach(t => {
       const m = t.data_referencia.substring(0, 7)
       if (monthsData[m]) {
         if (t.tipo === 'Receita') {
@@ -1516,6 +1648,7 @@ export default function App() {
       case 'Salário': return '💵';
       case 'Renda Extra': return '💸';
       case 'Vale Alimentação/Refeição': return '💳';
+      case 'Transferência': return '🔄';
       default: return '💰';
     }
   }
@@ -1638,19 +1771,68 @@ export default function App() {
                 <p className="text-xs text-slate-500">Exibindo estatísticas e lançamentos para o mês escolhido</p>
               </div>
               <div className="flex gap-2 w-full sm:w-auto">
-                <select
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="flex-1 sm:flex-initial bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-amber-500/20 rounded-xl py-2 px-4 font-semibold text-pink-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20 focus:border-pink-500 dark:focus:border-amber-500"
-                >
-                  {uniqueMonths.length > 0 ? (
-                    uniqueMonths.map(m => (
-                      <option key={m} value={m}>{m.split('-')[1]}/{m.split('-')[0]}</option>
-                    ))
-                  ) : (
-                    <option value="2026-05">05/2026</option>
+                <div className="relative flex-1 sm:flex-initial">
+                  <button
+                    type="button"
+                    onClick={() => setIsMonthDropdownOpen(!isMonthDropdownOpen)}
+                    className="flex items-center justify-between gap-2.5 w-full sm:w-40 bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-amber-500/20 rounded-xl py-2.5 px-4 font-bold text-pink-900 dark:text-slate-200 outline-none cursor-pointer focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20 hover:bg-pink-100/50 dark:hover:bg-slate-750 transition-all text-left"
+                  >
+                    <span>
+                      {selectedMonth.split('-')[1]}/{selectedMonth.split('-')[0]}
+                    </span>
+                    <ChevronDown className={`h-4.5 w-4.5 text-pink-600 dark:text-amber-400 transition-transform duration-200 ${isMonthDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {isMonthDropdownOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-20"
+                        onClick={() => setIsMonthDropdownOpen(false)}
+                      />
+                      <div className="absolute left-0 mt-2 w-full sm:w-40 bg-pink-50/95 dark:bg-slate-900/95 backdrop-blur-md border border-pink-200 dark:border-amber-500/25 rounded-2xl shadow-xl py-1.5 z-30 max-h-60 overflow-y-auto animate-slide-up">
+                        {uniqueMonths.length > 0 ? (
+                          uniqueMonths.map(m => {
+                            const isSelected = m === selectedMonth
+                            return (
+                              <button
+                                key={m}
+                                type="button"
+                                ref={isSelected ? (el) => {
+                                  if (el) {
+                                    setTimeout(() => {
+                                      el.scrollIntoView({ block: 'nearest', behavior: 'auto' })
+                                    }, 100)
+                                  }
+                                } : null}
+                                onClick={() => {
+                                  setSelectedMonth(m)
+                                  setIsMonthDropdownOpen(false)
+                                }}
+                                className={`w-full text-left px-4 py-2 text-sm font-semibold transition-colors cursor-pointer ${isSelected
+                                  ? 'bg-pink-200/80 dark:bg-amber-500/25 text-pink-900 dark:text-amber-400 font-bold'
+                                  : 'text-pink-950 dark:text-slate-200 hover:bg-pink-200/40 dark:hover:bg-slate-800'
+                                  }`}
+                              >
+                                {m.split('-')[1]}/{m.split('-')[0]}
+                              </button>
+                            )
+                          })
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedMonth('2026-05')
+                              setIsMonthDropdownOpen(false)
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm font-semibold text-pink-950 dark:text-slate-200 hover:bg-pink-200/40 dark:hover:bg-slate-800"
+                          >
+                            05/2026
+                          </button>
+                        )}
+                      </div>
+                    </>
                   )}
-                </select>
+                </div>
                 <button
                   onClick={() => {
                     setEditingTransactionId(null)
@@ -1682,9 +1864,19 @@ export default function App() {
                     <Wallet className="h-6 w-6" />
                   </div>
                 </div>
-                <div className="mt-4 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-semibold bg-slate-500/10 px-2 py-1 rounded-md w-fit">
-                  <Check className="h-3 w-3 text-emerald-500" />
-                  Saldo Líquido Pago
+                <div className="mt-4 flex items-center justify-between gap-1.5">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-semibold bg-slate-500/10 px-2 py-1 rounded-md w-fit">
+                    <Check className="h-3 w-3 text-emerald-500" />
+                    Saldo Líquido Pago
+                  </div>
+                  <button
+                    onClick={() => setIsTransferModalOpen(true)}
+                    className="flex items-center gap-1 text-xs text-pink-650 hover:text-pink-700 dark:text-amber-400 dark:hover:text-amber-500 font-bold bg-pink-100 hover:bg-pink-200/60 dark:bg-slate-800 dark:hover:bg-slate-700 px-2.5 py-1.5 rounded-lg transition-all shadow-sm cursor-pointer active:scale-95"
+                    title="Transferir saldo entre contas"
+                  >
+                    <ArrowLeftRight className="h-3.5 w-3.5" />
+                    Transferir
+                  </button>
                 </div>
 
                 {/* Divisor e Saldos Individuais */}
@@ -1731,46 +1923,146 @@ export default function App() {
                 <div className="absolute right-0 bottom-0 h-16 w-16 bg-pink-500/5 rounded-full blur-xl translate-x-4 translate-y-4 pointer-events-none"></div>
               </div>
 
-              {/* Card 2: Receita Total */}
-              <div className="glass-panel glass-panel-hover p-6 relative overflow-hidden">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Receitas do Mês</p>
-                    <h3 className="text-2xl font-bold mt-2 text-green-600 dark:text-green-400">
-                      {formatCurrency(totalReceita)}
-                    </h3>
+              {/* Card 2: Receitas do Mês */}
+              <div className="glass-panel glass-panel-hover p-6 relative overflow-hidden flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Receitas do Mês</p>
+                      <h3 className="text-2xl font-bold mt-2 text-green-600 dark:text-green-400">
+                        {formatCurrency(totalReceita)}
+                      </h3>
+                    </div>
+                    <div className="p-3 bg-green-100 dark:bg-green-900/40 rounded-xl text-green-600 dark:text-green-400 shadow-inner">
+                      <TrendingUp className="h-6 w-6" />
+                    </div>
                   </div>
-                  <div className="p-3 bg-green-100 dark:bg-green-900/40 rounded-xl text-green-600 dark:text-green-400 shadow-inner">
-                    <TrendingUp className="h-6 w-6" />
+
+                  <div className="mt-4 flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1 text-[11px] text-green-650 dark:text-green-400 font-semibold bg-green-500/10 px-2 py-1 rounded-md">
+                      <Check className="h-3 w-3" />
+                      Recebido: {formatCurrency(receitasPagas)}
+                    </div>
+                    <div className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 font-semibold bg-amber-500/10 px-2 py-1 rounded-md">
+                      <Clock className="h-3 w-3" />
+                      Pendente: {formatCurrency(receitasPendentes)}
+                    </div>
+                  </div>
+
+                  {/* Divisor e Receitas Individuais */}
+                  <div className="mt-4 pt-3 border-t border-pink-200/50 dark:border-slate-800/80 space-y-2">
+                    <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
+                      <div className="flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-amber-500 flex-shrink-0"></span>
+                        <div>
+                          <span className="text-slate-500 dark:text-slate-400 block text-[10px] font-medium uppercase tracking-wider">Felipe</span>
+                          <span className="text-sm font-extrabold text-slate-900 dark:text-white">
+                            {formatCurrency(receitasFelipe)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-end gap-1.5 text-right">
+                        <div>
+                          <span className="text-slate-500 dark:text-slate-400 block text-[10px] font-medium uppercase tracking-wider">Thaís</span>
+                          <span className="text-sm font-extrabold text-slate-900 dark:text-white">
+                            {formatCurrency(receitasThais)}
+                          </span>
+                        </div>
+                        <span className="h-2 w-2 rounded-full bg-pink-500 flex-shrink-0"></span>
+                      </div>
+                    </div>
+
+                    {/* Barra de Proporção da Receita */}
+                    {showReceitaSplitBar && (
+                      <div className="w-full bg-pink-100/50 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden flex" title="Proporção de receitas de cada um">
+                        <div
+                          className="h-full bg-amber-500 dark:bg-amber-450 transition-all duration-500"
+                          style={{ width: `${pctReceitaFelipe}%` }}
+                          title={`Felipe: ${formatCurrency(receitasFelipe)} (${pctReceitaFelipe.toFixed(0)}%)`}
+                        ></div>
+                        <div
+                          className="h-full bg-pink-500 dark:bg-pink-400 transition-all duration-500"
+                          style={{ width: `${100 - pctReceitaFelipe}%` }}
+                          title={`Thaís: ${formatCurrency(receitasThais)} (${(100 - pctReceitaFelipe).toFixed(0)}%)`}
+                        ></div>
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="mt-4 flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400 font-semibold bg-green-500/10 px-2 py-1 rounded-md w-fit">
-                  <ProfitIcon className="h-3 w-3" />
-                  Entradas ativas
-                </div>
+
                 {/* Efeito decorativo */}
-                <div className="absolute right-0 bottom-0 h-16 w-16 bg-green-500/5 rounded-full blur-xl translate-x-4 translate-y-4"></div>
+                <div className="absolute right-0 bottom-0 h-16 w-16 bg-green-500/5 rounded-full blur-xl translate-x-4 translate-y-4 pointer-events-none"></div>
               </div>
 
-              {/* Card 2: Despesa Total */}
-              <div className="glass-panel glass-panel-hover p-6 relative overflow-hidden">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Despesas do Mês</p>
-                    <h3 className="text-2xl font-bold mt-2 text-red-600 dark:text-red-400">
-                      {formatCurrency(totalDespesa)}
-                    </h3>
+              {/* Card 3: Despesas do Mês */}
+              <div className="glass-panel glass-panel-hover p-6 relative overflow-hidden flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Despesas do Mês</p>
+                      <h3 className="text-2xl font-bold mt-2 text-red-600 dark:text-red-400">
+                        {formatCurrency(totalDespesa)}
+                      </h3>
+                    </div>
+                    <div className="p-3 bg-red-100 dark:bg-red-900/40 rounded-xl text-red-600 dark:text-red-400 shadow-inner">
+                      <TrendingDown className="h-6 w-6" />
+                    </div>
                   </div>
-                  <div className="p-3 bg-red-100 dark:bg-red-900/40 rounded-xl text-red-600 dark:text-red-400 shadow-inner">
-                    <TrendingDown className="h-6 w-6" />
+
+                  <div className="mt-4 flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1 text-[11px] text-red-600 dark:text-red-400 font-semibold bg-red-500/10 px-2 py-1 rounded-md">
+                      <Check className="h-3 w-3" />
+                      Pago: {formatCurrency(despesasPagas)}
+                    </div>
+                    <div className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 font-semibold bg-amber-500/10 px-2 py-1 rounded-md">
+                      <Clock className="h-3 w-3" />
+                      Pendente: {formatCurrency(despesasPendentes)}
+                    </div>
+                  </div>
+
+                  {/* Divisor e Despesas Individuais */}
+                  <div className="mt-4 pt-3 border-t border-pink-200/50 dark:border-slate-800/80 space-y-2">
+                    <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
+                      <div className="flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-amber-500 flex-shrink-0"></span>
+                        <div>
+                          <span className="text-slate-500 dark:text-slate-400 block text-[10px] font-medium uppercase tracking-wider">Felipe</span>
+                          <span className="text-sm font-extrabold text-slate-900 dark:text-white">
+                            {formatCurrency(despesasFelipe)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-end gap-1.5 text-right">
+                        <div>
+                          <span className="text-slate-500 dark:text-slate-400 block text-[10px] font-medium uppercase tracking-wider">Thaís</span>
+                          <span className="text-sm font-extrabold text-slate-900 dark:text-white">
+                            {formatCurrency(despesasThais)}
+                          </span>
+                        </div>
+                        <span className="h-2 w-2 rounded-full bg-pink-500 flex-shrink-0"></span>
+                      </div>
+                    </div>
+
+                    {/* Barra de Proporção da Despesa */}
+                    {showDespesaSplitBar && (
+                      <div className="w-full bg-pink-100/50 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden flex" title="Proporção de despesas de cada um">
+                        <div
+                          className="h-full bg-amber-500 dark:bg-amber-450 transition-all duration-500"
+                          style={{ width: `${pctDespesaFelipe}%` }}
+                          title={`Felipe: ${formatCurrency(despesasFelipe)} (${pctDespesaFelipe.toFixed(0)}%)`}
+                        ></div>
+                        <div
+                          className="h-full bg-pink-500 dark:bg-pink-400 transition-all duration-500"
+                          style={{ width: `${100 - pctDespesaFelipe}%` }}
+                          title={`Thaís: ${formatCurrency(despesasThais)} (${(100 - pctDespesaFelipe).toFixed(0)}%)`}
+                        ></div>
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="mt-4 flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400 font-semibold bg-red-500/10 px-2 py-1 rounded-md w-fit">
-                  <TrendingDown className="h-3 w-3" />
-                  Saídas registradas
-                </div>
+
                 {/* Efeito decorativo */}
-                <div className="absolute right-0 bottom-0 h-16 w-16 bg-red-500/5 rounded-full blur-xl translate-x-4 translate-y-4"></div>
+                <div className="absolute right-0 bottom-0 h-16 w-16 bg-red-500/5 rounded-full blur-xl translate-x-4 translate-y-4 pointer-events-none"></div>
               </div>
 
               {/* Card 3: Saldo do Mês */}
@@ -1805,12 +2097,13 @@ export default function App() {
                   {saldoLiquido < 0 && (
                     <div className="mt-2 text-xs border-t border-pink-200/50 dark:border-slate-800/80 pt-2 space-y-1.5">
                       <div className="text-[10px] text-slate-500 dark:text-slate-455 font-bold uppercase tracking-wider">Meta Diária (Dias Úteis)</div>
-                      <div className="font-bold text-slate-850 dark:text-slate-200">
-                        {formatCurrency(dailyNeededTotal)} <span className="text-[10px] font-normal text-slate-500">/ dia ({totalBusinessDays} d.ú.)</span>
-                      </div>
-                      {isMonthCurrent() && remainingBusinessDays > 0 && remainingBusinessDays < totalBusinessDays && (
+                      {isMonthCurrent() && remainingBusinessDays > 0 ? (
                         <div className="font-bold text-pink-650 dark:text-amber-400">
                           {formatCurrency(dailyNeededRemaining)} <span className="text-[10px] font-normal text-slate-500">/ dia rest. ({remainingBusinessDays} d.ú.)</span>
+                        </div>
+                      ) : (
+                        <div className="font-bold text-slate-850 dark:text-slate-200">
+                          {formatCurrency(dailyNeededTotal)} <span className="text-[10px] font-normal text-slate-500">/ dia ({totalBusinessDays} d.ú.)</span>
                         </div>
                       )}
                     </div>
@@ -2099,24 +2392,24 @@ export default function App() {
                         })
                         .map(c => {
                           const net = c.Receitas - c.Despesas
-                        return (
-                          <div key={c.name} className="p-3 bg-pink-100/10 dark:bg-slate-900/50 rounded-xl border border-pink-200/30 dark:border-slate-850/30 space-y-1.5">
-                            <div className="flex justify-between items-center text-sm font-semibold">
-                              <span className="text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                                <span className="text-base">{getCategoryIcon(c.name)}</span>
-                                {c.name}
-                              </span>
-                              <span className={`text-xs font-bold ${net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                                {net >= 0 ? '+' : ''}{formatCurrency(net)}
-                              </span>
+                          return (
+                            <div key={c.name} className="p-3 bg-pink-100/10 dark:bg-slate-900/50 rounded-xl border border-pink-200/30 dark:border-slate-850/30 space-y-1.5">
+                              <div className="flex justify-between items-center text-sm font-semibold">
+                                <span className="text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                                  <span className="text-base">{getCategoryIcon(c.name)}</span>
+                                  {c.name}
+                                </span>
+                                <span className={`text-xs font-bold ${net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                                  {net >= 0 ? '+' : ''}{formatCurrency(net)}
+                                </span>
+                              </div>
+                              <div className="flex justify-between text-xs text-slate-550 dark:text-slate-400">
+                                <span>Entradas: {formatCurrency(c.Receitas)}</span>
+                                <span>Saídas: {formatCurrency(c.Despesas)}</span>
+                              </div>
                             </div>
-                            <div className="flex justify-between text-xs text-slate-550 dark:text-slate-400">
-                              <span>Entradas: {formatCurrency(c.Receitas)}</span>
-                              <span>Saídas: {formatCurrency(c.Despesas)}</span>
-                            </div>
-                          </div>
-                        )
-                      })
+                          )
+                        })
                     ) : (
                       <p className="text-xs text-slate-550 dark:text-slate-400 italic py-4 text-center">Nenhum lançamento no mês selecionado.</p>
                     )}
@@ -2761,7 +3054,7 @@ export default function App() {
                         onChange={(e) => setFormMetaCategoria(e.target.value)}
                         className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-semibold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
                       >
-                        {categoriasValidas.map(c => (
+                        {categoriasValidas.filter(c => c !== 'Transferência').map(c => (
                           <option key={c} value={c}>
                             {getCategoryIcon(c)} {c}
                           </option>
@@ -2779,23 +3072,23 @@ export default function App() {
                           type="text"
                           required
                           value={formMetaValor}
-                        onChange={(e) => {
-                          const cleanDigits = e.target.value.replace(/\D/g, '');
-                          if (!cleanDigits) {
-                            setFormMetaValor('');
-                            return;
-                          }
-                          const cents = parseInt(cleanDigits, 10);
-                          if (cents === 0) {
-                            setFormMetaValor('');
-                            return;
-                          }
-                          const formatted = (cents / 100).toLocaleString('pt-BR', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
-                          });
-                          setFormMetaValor(formatted);
-                        }}
+                          onChange={(e) => {
+                            const cleanDigits = e.target.value.replace(/\D/g, '');
+                            if (!cleanDigits) {
+                              setFormMetaValor('');
+                              return;
+                            }
+                            const cents = parseInt(cleanDigits, 10);
+                            if (cents === 0) {
+                              setFormMetaValor('');
+                              return;
+                            }
+                            const formatted = (cents / 100).toLocaleString('pt-BR', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2
+                            });
+                            setFormMetaValor(formatted);
+                          }}
                           placeholder="Ex: 1000,00"
                           className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl pl-9 pr-4 py-2.5 text-sm text-pink-955 dark:text-white font-bold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
                         />
@@ -2988,7 +3281,7 @@ export default function App() {
                     onChange={(e) => setFormCategoria(e.target.value)}
                     className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-semibold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
                   >
-                    {categoriasValidas.map(c => (
+                    {categoriasValidas.filter(c => c !== 'Transferência').map(c => (
                       <option key={c} value={c}>
                         {getCategoryIcon(c)} {c}
                       </option>
@@ -3366,6 +3659,152 @@ export default function App() {
         </div>
       )}
 
+      {/* --- MODAL DE TRANSFERÊNCIA DE SALDO ENTRE CONTAS --- */}
+      {isTransferModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in">
+          <div
+            className="w-full max-w-md bg-pink-50 dark:bg-slate-900 rounded-3xl shadow-2xl border border-pink-200/60 dark:border-slate-800/50 overflow-hidden animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Cabeçalho */}
+            <div className="p-6 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-slate-900 dark:to-slate-950 text-white flex justify-between items-center">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-white/10 rounded-lg">
+                  <ArrowLeftRight className="h-5 w-5 text-pink-100 dark:text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base">Transferência entre Contas</h3>
+                  <p className="text-[10px] text-pink-200/90 dark:text-slate-400">Ajuste o saldo do Felipe e da Thaís</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setFormTransferValor('')
+                  setFormTransferDesc('')
+                  setIsTransferModalOpen(false)
+                }}
+                className="text-white/85 hover:text-white text-sm font-bold bg-white/15 hover:bg-white/20 px-2.5 py-1 rounded-lg transition-all"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Conteúdo do Formulário */}
+            <form onSubmit={handleSaveTransfer} className="p-6 space-y-4">
+
+              {/* De / Para */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">De (Origem)</label>
+                  <select
+                    value={formTransferDe}
+                    onChange={(e) => {
+                      const de = e.target.value
+                      setFormTransferDe(de)
+                      setFormTransferPara(de === 'Felipe' ? 'Thaís' : 'Felipe')
+                    }}
+                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-semibold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
+                  >
+                    <option value="Felipe">Felipe</option>
+                    <option value="Thaís">Thaís</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Para (Destino)</label>
+                  <div className="w-full bg-pink-100/50 dark:bg-slate-800/40 border border-pink-200/50 dark:border-slate-800 rounded-xl py-2.5 px-3 text-sm text-slate-500 dark:text-slate-450 font-bold select-none">
+                    {formTransferPara}
+                  </div>
+                </div>
+              </div>
+
+              {/* Valor (R$) e Data */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Valor (R$)</label>
+                  <div className="relative rounded-xl shadow-sm">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <span className="text-slate-400 font-semibold text-xs">R$</span>
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      value={formTransferValor}
+                      onChange={(e) => {
+                        const cleanDigits = e.target.value.replace(/\D/g, '');
+                        if (!cleanDigits) {
+                          setFormTransferValor('');
+                          return;
+                        }
+                        const cents = parseInt(cleanDigits, 10);
+                        if (cents === 0) {
+                          setFormTransferValor('');
+                          return;
+                        }
+                        const formatted = (cents / 100).toLocaleString('pt-BR', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2
+                        });
+                        setFormTransferValor(formatted);
+                      }}
+                      placeholder="0,00"
+                      className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl pl-9 pr-4 py-2.5 text-sm text-pink-955 dark:text-white font-bold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Data</label>
+                  <input
+                    type="date"
+                    required
+                    value={formTransferData}
+                    onChange={(e) => setFormTransferData(e.target.value)}
+                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
+                  />
+                </div>
+              </div>
+
+              {/* Descrição / Motivo */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Descrição (Opcional)</label>
+                <input
+                  type="text"
+                  value={formTransferDesc}
+                  onChange={(e) => setFormTransferDesc(capitalizeWords(e.target.value))}
+                  placeholder="Ex: Reembolso, acerto..."
+                  className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm text-pink-955 dark:text-white font-medium outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
+                />
+              </div>
+
+              {/* Botões do Modal */}
+              <div className="flex gap-3 pt-4 border-t border-pink-200/60 dark:border-slate-800/50">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormTransferValor('')
+                    setFormTransferDesc('')
+                    setIsTransferModalOpen(false)
+                  }}
+                  className="btn-secondary flex-1"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary flex-1 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-amber-500 dark:to-amber-600 dark:text-slate-950 font-bold flex items-center justify-center gap-1.5"
+                >
+                  <ArrowLeftRight className="h-4 w-4" />
+                  Confirmar
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
+
