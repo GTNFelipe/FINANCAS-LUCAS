@@ -5,6 +5,14 @@
 /* Habilita o controle do dark mode manual por classe (Tailwind v4) */
 @variant dark (&:where(.dark, .dark *));
 
+/* Define o esquema de cores para os controles nativos do navegador (calendário, etc.) */
+:root {
+  color-scheme: light;
+}
+:root.dark {
+  color-scheme: dark;
+}
+
 @theme {
   --font-sans: 'Inter', sans-serif;
   --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;

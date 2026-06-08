@@ -9,7 +9,6 @@ import {
   Wallet,
   Target,
   Calendar,
-  User,
   Check,
   Clock,
   Trash2,
@@ -18,9 +17,7 @@ import {
   SlidersHorizontal,
   RefreshCw,
   Info,
-  ChevronRight,
   ChevronDown,
-  TrendingUp as ProfitIcon,
   CreditCard,
   ArrowLeftRight
 } from 'lucide-react'
@@ -67,7 +64,14 @@ export default function App() {
   const [filterPerson, setFilterPerson] = useState('Todos')
   const [filterType, setFilterType] = useState('Todos')
   const [filterStatus, setFilterStatus] = useState('Todos')
+  const [filterCategory, setFilterCategory] = useState('Todas')
   const [isMonthDropdownOpen, setIsMonthDropdownOpen] = useState(false)
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false)
+  const [isFormCategoriaDropdownOpen, setIsFormCategoriaDropdownOpen] = useState(false)
+  const [isFormQuemPagouDropdownOpen, setIsFormQuemPagouDropdownOpen] = useState(false)
+  const [isFormRecorrenciaDropdownOpen, setIsFormRecorrenciaDropdownOpen] = useState(false)
+  const [isFormMetaCategoriaDropdownOpen, setIsFormMetaCategoriaDropdownOpen] = useState(false)
+  const [isFormTransferDeDropdownOpen, setIsFormTransferDeDropdownOpen] = useState(false)
 
   // --- Estados do Formulário de Lançamento ---
   const [formValor, setFormValor] = useState('')
@@ -1312,8 +1316,12 @@ export default function App() {
   const getHolidaysForYear = (year) => {
     const holidays = [
       `${year}-01-01`, // Confraternização Universal
+      `${year}-01-20`, // São Sebastião (Rio de Janeiro)
+      `${year}-01-25`, // Aniversário de São Paulo
       `${year}-04-21`, // Tiradentes
+      `${year}-04-23`, // São Jorge (Rio de Janeiro)
       `${year}-05-01`, // Dia do Trabalho
+      `${year}-07-09`, // Revolução Constitucionalista (São Paulo)
       `${year}-09-07`, // Independência
       `${year}-10-12`, // Nossa Senhora Aparecida
       `${year}-11-02`, // Finados
@@ -1516,7 +1524,8 @@ export default function App() {
     const matchPerson = filterPerson === 'Todos' || t.quem_pagou === filterPerson
     const matchType = filterType === 'Todos' || t.tipo === filterType
     const matchStatus = filterStatus === 'Todos' || t.status === filterStatus
-    return matchPerson && matchType && matchStatus
+    const matchCategory = filterCategory === 'Todas' || t.categoria === filterCategory
+    return matchPerson && matchType && matchStatus && matchCategory
   })
 
   // Módulos de meses únicos para filtros
@@ -2644,6 +2653,66 @@ export default function App() {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
+                  {/* Categoria */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-slate-500">Cat:</span>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
+                        className="flex items-center justify-between gap-2.5 bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-amber-500/20 rounded-xl py-1.5 px-3 font-semibold text-xs text-pink-900 dark:text-slate-200 outline-none cursor-pointer focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20 hover:bg-pink-100/50 dark:hover:bg-slate-750 transition-all text-left"
+                      >
+                        <span>
+                          {filterCategory === 'Todas' ? '🔍 Todas' : `${getCategoryIcon(filterCategory)} ${filterCategory}`}
+                        </span>
+                        <ChevronDown className={`h-4 w-4 text-pink-600 dark:text-amber-400 transition-transform duration-200 ${isCategoryDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {isCategoryDropdownOpen && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-20"
+                            onClick={() => setIsCategoryDropdownOpen(false)}
+                          />
+                          <div className="absolute left-0 mt-2 w-52 bg-pink-50/95 dark:bg-slate-900/95 backdrop-blur-md border border-pink-200 dark:border-amber-500/25 rounded-2xl shadow-xl py-1.5 z-30 max-h-60 overflow-y-auto animate-slide-up">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFilterCategory('Todas')
+                                setIsCategoryDropdownOpen(false)
+                              }}
+                              className={`w-full text-left px-4 py-2 text-xs font-semibold transition-colors cursor-pointer ${filterCategory === 'Todas'
+                                ? 'bg-pink-200/80 dark:bg-amber-500/25 text-pink-900 dark:text-amber-400 font-bold'
+                                : 'text-pink-950 dark:text-slate-200 hover:bg-pink-200/40 dark:hover:bg-slate-800'
+                                }`}
+                            >
+                              🔍 Todas
+                            </button>
+                            {categoriasValidas.map(cat => {
+                              const isSelected = cat === filterCategory
+                              return (
+                                <button
+                                  key={cat}
+                                  type="button"
+                                  onClick={() => {
+                                    setFilterCategory(cat)
+                                    setIsCategoryDropdownOpen(false)
+                                  }}
+                                  className={`w-full text-left px-4 py-2 text-xs font-semibold transition-colors cursor-pointer ${isSelected
+                                    ? 'bg-pink-200/80 dark:bg-amber-500/25 text-pink-900 dark:text-amber-400 font-bold'
+                                    : 'text-pink-950 dark:text-slate-200 hover:bg-pink-200/40 dark:hover:bg-slate-800'
+                                    }`}
+                                >
+                                  {getCategoryIcon(cat)} {cat}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="flex bg-pink-200/40 dark:bg-slate-900 p-0.5 rounded-lg border border-pink-200/60 dark:border-amber-500/20 text-xs">
                     {['Todos', 'Felipe', 'Thaís'].map(p => (
                       <button
@@ -2848,7 +2917,67 @@ export default function App() {
                 </div>
 
                 {/* Filtro de pessoas & tipos */}
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Categoria */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-slate-500">Cat:</span>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
+                        className="flex items-center justify-between gap-2.5 bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-amber-500/20 rounded-xl py-1.5 px-3 font-semibold text-xs text-pink-900 dark:text-slate-200 outline-none cursor-pointer focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20 hover:bg-pink-100/50 dark:hover:bg-slate-750 transition-all text-left"
+                      >
+                        <span>
+                          {filterCategory === 'Todas' ? '🔍 Todas' : `${getCategoryIcon(filterCategory)} ${filterCategory}`}
+                        </span>
+                        <ChevronDown className={`h-4 w-4 text-pink-600 dark:text-amber-400 transition-transform duration-200 ${isCategoryDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {isCategoryDropdownOpen && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-20"
+                            onClick={() => setIsCategoryDropdownOpen(false)}
+                          />
+                          <div className="absolute left-0 mt-2 w-52 bg-pink-50/95 dark:bg-slate-900/95 backdrop-blur-md border border-pink-200 dark:border-amber-500/25 rounded-2xl shadow-xl py-1.5 z-30 max-h-60 overflow-y-auto animate-slide-up">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFilterCategory('Todas')
+                                setIsCategoryDropdownOpen(false)
+                              }}
+                              className={`w-full text-left px-4 py-2 text-xs font-semibold transition-colors cursor-pointer ${filterCategory === 'Todas'
+                                ? 'bg-pink-200/80 dark:bg-amber-500/25 text-pink-900 dark:text-amber-400 font-bold'
+                                : 'text-pink-950 dark:text-slate-200 hover:bg-pink-200/40 dark:hover:bg-slate-800'
+                                }`}
+                            >
+                              🔍 Todas
+                            </button>
+                            {categoriasValidas.map(cat => {
+                              const isSelected = cat === filterCategory
+                              return (
+                                <button
+                                  key={cat}
+                                  type="button"
+                                  onClick={() => {
+                                    setFilterCategory(cat)
+                                    setIsCategoryDropdownOpen(false)
+                                  }}
+                                  className={`w-full text-left px-4 py-2 text-xs font-semibold transition-colors cursor-pointer ${isSelected
+                                    ? 'bg-pink-200/80 dark:bg-amber-500/25 text-pink-900 dark:text-amber-400 font-bold'
+                                    : 'text-pink-950 dark:text-slate-200 hover:bg-pink-200/40 dark:hover:bg-slate-800'
+                                    }`}
+                                >
+                                  {getCategoryIcon(cat)} {cat}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Quem Pagou */}
                   <div className="flex bg-pink-200/40 dark:bg-slate-900 p-0.5 rounded-lg border border-pink-200/60 dark:border-amber-500/20 text-xs">
                     {['Todos', 'Felipe', 'Thaís'].map(p => (
@@ -3049,17 +3178,48 @@ export default function App() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="text-xs font-bold text-slate-600 dark:text-slate-400 block">Categoria</label>
-                      <select
-                        value={formMetaCategoria}
-                        onChange={(e) => setFormMetaCategoria(e.target.value)}
-                        className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-semibold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
-                      >
-                        {categoriasValidas.filter(c => c !== 'Transferência').map(c => (
-                          <option key={c} value={c}>
-                            {getCategoryIcon(c)} {c}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setIsFormMetaCategoriaDropdownOpen(!isFormMetaCategoriaDropdownOpen)}
+                          className="flex items-center justify-between gap-2.5 w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-semibold outline-none cursor-pointer focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20 hover:bg-pink-100/50 dark:hover:bg-slate-750 transition-all text-left"
+                        >
+                          <span>
+                            {getCategoryIcon(formMetaCategoria)} {formMetaCategoria}
+                          </span>
+                          <ChevronDown className={`h-4.5 w-4.5 text-pink-600 dark:text-amber-400 transition-transform duration-200 ${isFormMetaCategoriaDropdownOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {isFormMetaCategoriaDropdownOpen && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-20"
+                              onClick={() => setIsFormMetaCategoriaDropdownOpen(false)}
+                            />
+                            <div className="absolute left-0 mt-2 w-full bg-pink-50/95 dark:bg-slate-900/95 backdrop-blur-md border border-pink-200 dark:border-amber-500/25 rounded-2xl shadow-xl py-1.5 z-30 max-h-60 overflow-y-auto animate-slide-up">
+                              {categoriasValidas.filter(c => c !== 'Transferência').map(c => {
+                                const isSelected = c === formMetaCategoria
+                                return (
+                                  <button
+                                    key={c}
+                                    type="button"
+                                    onClick={() => {
+                                      setFormMetaCategoria(c)
+                                      setIsFormMetaCategoriaDropdownOpen(false)
+                                    }}
+                                    className={`w-full text-left px-4 py-2 text-sm font-semibold transition-colors cursor-pointer ${isSelected
+                                      ? 'bg-pink-200/80 dark:bg-amber-500/25 text-pink-900 dark:text-amber-400 font-bold'
+                                      : 'text-pink-950 dark:text-slate-200 hover:bg-pink-200/40 dark:hover:bg-slate-800'
+                                      }`}
+                                  >
+                                    {getCategoryIcon(c)} {c}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
 
                     <div className="space-y-1">
@@ -3276,17 +3436,48 @@ export default function App() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Categoria</label>
-                  <select
-                    value={formCategoria}
-                    onChange={(e) => setFormCategoria(e.target.value)}
-                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-semibold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
-                  >
-                    {categoriasValidas.filter(c => c !== 'Transferência').map(c => (
-                      <option key={c} value={c}>
-                        {getCategoryIcon(c)} {c}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsFormCategoriaDropdownOpen(!isFormCategoriaDropdownOpen)}
+                      className="flex items-center justify-between gap-2.5 w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-semibold outline-none cursor-pointer focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20 hover:bg-pink-100/50 dark:hover:bg-slate-750 transition-all text-left"
+                    >
+                      <span>
+                        {getCategoryIcon(formCategoria)} {formCategoria}
+                      </span>
+                      <ChevronDown className={`h-4.5 w-4.5 text-pink-600 dark:text-amber-400 transition-transform duration-200 ${isFormCategoriaDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {isFormCategoriaDropdownOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-20"
+                          onClick={() => setIsFormCategoriaDropdownOpen(false)}
+                        />
+                        <div className="absolute left-0 mt-2 w-full bg-pink-50/95 dark:bg-slate-900/95 backdrop-blur-md border border-pink-200 dark:border-amber-500/25 rounded-2xl shadow-xl py-1.5 z-30 max-h-60 overflow-y-auto animate-slide-up">
+                          {categoriasValidas.filter(c => c !== 'Transferência').map(c => {
+                            const isSelected = c === formCategoria
+                            return (
+                              <button
+                                key={c}
+                                type="button"
+                                onClick={() => {
+                                  setFormCategoria(c)
+                                  setIsFormCategoriaDropdownOpen(false)
+                                }}
+                                className={`w-full text-left px-4 py-2 text-sm font-semibold transition-colors cursor-pointer ${isSelected
+                                  ? 'bg-pink-200/80 dark:bg-amber-500/25 text-pink-900 dark:text-amber-400 font-bold'
+                                  : 'text-pink-950 dark:text-slate-200 hover:bg-pink-200/40 dark:hover:bg-slate-800'
+                                  }`}
+                              >
+                                {getCategoryIcon(c)} {c}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-1">
@@ -3305,14 +3496,46 @@ export default function App() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Quem Pagou / Recebeu</label>
-                  <select
-                    value={formQuemPagou}
-                    onChange={(e) => setFormQuemPagou(e.target.value)}
-                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-semibold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
-                  >
-                    <option value="Felipe">Felipe</option>
-                    <option value="Thaís">Thaís</option>
-                  </select>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsFormQuemPagouDropdownOpen(!isFormQuemPagouDropdownOpen)}
+                      className="flex items-center justify-between gap-2.5 w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-semibold outline-none cursor-pointer focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20 hover:bg-pink-100/50 dark:hover:bg-slate-750 transition-all text-left"
+                    >
+                      <span>{formQuemPagou}</span>
+                      <ChevronDown className={`h-4.5 w-4.5 text-pink-600 dark:text-amber-400 transition-transform duration-200 ${isFormQuemPagouDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {isFormQuemPagouDropdownOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-20"
+                          onClick={() => setIsFormQuemPagouDropdownOpen(false)}
+                        />
+                        <div className="absolute left-0 mt-2 w-full bg-pink-50/95 dark:bg-slate-900/95 backdrop-blur-md border border-pink-200 dark:border-amber-500/25 rounded-2xl shadow-xl py-1.5 z-30 max-h-60 overflow-y-auto animate-slide-up">
+                          {['Felipe', 'Thaís'].map(p => {
+                            const isSelected = p === formQuemPagou
+                            return (
+                              <button
+                                key={p}
+                                type="button"
+                                onClick={() => {
+                                  setFormQuemPagou(p)
+                                  setIsFormQuemPagouDropdownOpen(false)
+                                }}
+                                className={`w-full text-left px-4 py-2 text-sm font-semibold transition-colors cursor-pointer ${isSelected
+                                  ? 'bg-pink-200/80 dark:bg-amber-500/25 text-pink-900 dark:text-amber-400 font-bold'
+                                  : 'text-pink-950 dark:text-slate-200 hover:bg-pink-200/40 dark:hover:bg-slate-800'
+                                  }`}
+                              >
+                                {p}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-1">
@@ -3328,24 +3551,48 @@ export default function App() {
 
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">Recorrência</label>
-                  <select
-                    value={formRecorrencia}
-                    onChange={(e) => setFormRecorrencia(parseInt(e.target.value, 10))}
-                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-bold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
-                  >
-                    <option value={1}>1x (Única)</option>
-                    <option value={2}>2x (Parcelado/Recorrente)</option>
-                    <option value={3}>3x</option>
-                    <option value={4}>4x</option>
-                    <option value={5}>5x</option>
-                    <option value={6}>6x</option>
-                    <option value={7}>7x</option>
-                    <option value={8}>8x</option>
-                    <option value={9}>9x</option>
-                    <option value={10}>10x</option>
-                    <option value={11}>11x</option>
-                    <option value={12}>12x (Recorrência Anual)</option>
-                  </select>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsFormRecorrenciaDropdownOpen(!isFormRecorrenciaDropdownOpen)}
+                      className="flex items-center justify-between gap-2.5 w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-bold outline-none cursor-pointer focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20 hover:bg-pink-100/50 dark:hover:bg-slate-750 transition-all text-left"
+                    >
+                      <span>
+                        {formRecorrencia === 1 ? '1x (Única)' : formRecorrencia === 12 ? '12x (Recorrência Anual)' : `${formRecorrencia}x`}
+                      </span>
+                      <ChevronDown className={`h-4.5 w-4.5 text-pink-600 dark:text-amber-400 transition-transform duration-200 ${isFormRecorrenciaDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {isFormRecorrenciaDropdownOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-20"
+                          onClick={() => setIsFormRecorrenciaDropdownOpen(false)}
+                        />
+                        <div className="absolute left-0 mt-2 w-full bg-pink-50/95 dark:bg-slate-900/95 backdrop-blur-md border border-pink-200 dark:border-amber-500/25 rounded-2xl shadow-xl py-1.5 z-30 max-h-60 overflow-y-auto animate-slide-up">
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(r => {
+                            const isSelected = r === formRecorrencia
+                            return (
+                              <button
+                                key={r}
+                                type="button"
+                                onClick={() => {
+                                  setFormRecorrencia(r)
+                                  setIsFormRecorrenciaDropdownOpen(false)
+                                }}
+                                className={`w-full text-left px-4 py-2 text-sm font-semibold transition-colors cursor-pointer ${isSelected
+                                  ? 'bg-pink-200/80 dark:bg-amber-500/25 text-pink-900 dark:text-amber-400 font-bold'
+                                  : 'text-pink-950 dark:text-slate-200 hover:bg-pink-200/40 dark:hover:bg-slate-800'
+                                  }`}
+                              >
+                                {r === 1 ? '1x (Única)' : r === 12 ? '12x (Recorrência Anual)' : `${r}x`}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -3696,18 +3943,47 @@ export default function App() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">De (Origem)</label>
-                  <select
-                    value={formTransferDe}
-                    onChange={(e) => {
-                      const de = e.target.value
-                      setFormTransferDe(de)
-                      setFormTransferPara(de === 'Felipe' ? 'Thaís' : 'Felipe')
-                    }}
-                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-semibold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
-                  >
-                    <option value="Felipe">Felipe</option>
-                    <option value="Thaís">Thaís</option>
-                  </select>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsFormTransferDeDropdownOpen(!isFormTransferDeDropdownOpen)}
+                      className="flex items-center justify-between gap-2.5 w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-semibold outline-none cursor-pointer focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20 hover:bg-pink-100/50 dark:hover:bg-slate-750 transition-all text-left"
+                    >
+                      <span>{formTransferDe}</span>
+                      <ChevronDown className={`h-4.5 w-4.5 text-pink-600 dark:text-amber-400 transition-transform duration-200 ${isFormTransferDeDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {isFormTransferDeDropdownOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-20"
+                          onClick={() => setIsFormTransferDeDropdownOpen(false)}
+                        />
+                        <div className="absolute left-0 mt-2 w-full bg-pink-50/95 dark:bg-slate-900/95 backdrop-blur-md border border-pink-200 dark:border-amber-500/25 rounded-2xl shadow-xl py-1.5 z-30 max-h-60 overflow-y-auto animate-slide-up">
+                          {['Felipe', 'Thaís'].map(p => {
+                            const isSelected = p === formTransferDe
+                            return (
+                              <button
+                                key={p}
+                                type="button"
+                                onClick={() => {
+                                  setFormTransferDe(p)
+                                  setFormTransferPara(p === 'Felipe' ? 'Thaís' : 'Felipe')
+                                  setIsFormTransferDeDropdownOpen(false)
+                                }}
+                                className={`w-full text-left px-4 py-2 text-sm font-semibold transition-colors cursor-pointer ${isSelected
+                                  ? 'bg-pink-200/80 dark:bg-amber-500/25 text-pink-900 dark:text-amber-400 font-bold'
+                                  : 'text-pink-955 dark:text-slate-200 hover:bg-pink-200/40 dark:hover:bg-slate-800'
+                                  }`}
+                              >
+                                {p}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-1">
