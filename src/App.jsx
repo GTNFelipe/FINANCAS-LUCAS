@@ -2506,7 +2506,7 @@ export default function App() {
                                 {getCategoryIcon(tx.categoria)}
                               </span>
                               <div className="min-w-0 flex-1">
-                                <span className="font-semibold text-slate-800 dark:text-slate-200 block truncate">{tx.categoria}</span>
+                                <span className={`font-semibold block truncate ${tx.tipo === 'Receita' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>{tx.categoria}</span>
                                 <span className="text-xs text-slate-500 dark:text-slate-400 block truncate" title={tx.subcategoria}>{tx.subcategoria}</span>
                               </div>
                             </div>
@@ -2522,7 +2522,7 @@ export default function App() {
                           </td>
                           <td className={`p-4 font-bold whitespace-nowrap ${tx.tipo === 'Receita'
                             ? 'text-emerald-600 dark:text-emerald-400'
-                            : 'text-slate-900 dark:text-white'
+                            : 'text-rose-600 dark:text-rose-400'
                             }`}>
                             {tx.tipo === 'Receita' ? '+' : '-'} {formatCurrency(tx.valor)}
                           </td>
@@ -2773,7 +2773,7 @@ export default function App() {
                           <td className="p-4 font-semibold text-slate-700 dark:text-slate-300">
                             {tx.data_referencia.split('-')[1]}/{tx.data_referencia.split('-')[0]}
                           </td>
-                          <td className="p-4 font-bold text-slate-800 dark:text-slate-200">
+                          <td className={`p-4 font-bold ${tx.tipo === 'Receita' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                             {getCategoryIcon(tx.categoria)} {tx.categoria}
                           </td>
                           <td className="p-4 text-slate-500 dark:text-slate-400 max-w-[200px] truncate" title={tx.subcategoria}>{tx.subcategoria}</td>
@@ -2785,7 +2785,9 @@ export default function App() {
                               {tx.quem_pagou}
                             </span>
                           </td>
-                          <td className={`p-4 font-bold ${tx.tipo === 'Receita' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'
+                          <td className={`p-4 font-bold ${tx.tipo === 'Receita'
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-rose-600 dark:text-rose-400'
                             }`}>
                             {tx.tipo === 'Receita' ? '+' : '-'} {formatCurrency(tx.valor)}
                           </td>
