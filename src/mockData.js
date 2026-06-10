@@ -1,11 +1,5 @@
 // Dados iniciais simulados para a planilha financeira familiar (Felipe & Thaís)
 
-export const initialMetas = [
-  { id: 'm1', categoria: 'Lazer', valor_meta: 800.00, descricao: 'Cinema, viagens e jantares de fim de semana' },
-  { id: 'm2', categoria: 'Casa', valor_meta: 2500.00, descricao: 'Contas, condomínio e manutenção geral' },
-  { id: 'm3', categoria: 'Saúde', valor_meta: 600.00, descricao: 'Consultas médicas e exames de rotina' },
-  { id: 'm4', categoria: 'Transporte', valor_meta: 500.00, descricao: 'Combustível e manutenção do carro familiar' },
-]
 
 export const initialTransactions = [
   // --- MÊS ATUAL: MAIO 2026 ---

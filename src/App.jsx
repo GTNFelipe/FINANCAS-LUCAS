@@ -35,18 +35,17 @@ import {
   Cell
 } from 'recharts'
 import { supabase, isSupabaseConfigured } from './supabaseClient'
-import { initialTransactions, initialMetas, initialPoupanca } from './mockData'
+import { initialTransactions, initialPoupanca } from './mockData'
 
 export default function App() {
   // --- Estados do Aplicativo ---
   const [transactions, setTransactions] = useState([])
-  const [metas, setMetas] = useState([])
   const [poupancas, setPoupancas] = useState([])
   const [isPoupancaModalOpen, setIsPoupancaModalOpen] = useState(false)
   const [theme, setTheme] = useState(() => {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   })
-  const [activeTab, setActiveTab] = useState('dashboard') // 'dashboard' | 'lancamentos' | 'metas'
+  const [activeTab, setActiveTab] = useState('dashboard') // 'dashboard' | 'lancamentos'
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingTransactionId, setEditingTransactionId] = useState(null)
   const [isSyncing, setIsSyncing] = useState(false)
@@ -68,7 +67,6 @@ export default function App() {
   const [isFormCategoriaDropdownOpen, setIsFormCategoriaDropdownOpen] = useState(false)
   const [isFormQuemPagouDropdownOpen, setIsFormQuemPagouDropdownOpen] = useState(false)
   const [isFormRecorrenciaDropdownOpen, setIsFormRecorrenciaDropdownOpen] = useState(false)
-  const [isFormMetaCategoriaDropdownOpen, setIsFormMetaCategoriaDropdownOpen] = useState(false)
   const [isFormTransferDeDropdownOpen, setIsFormTransferDeDropdownOpen] = useState(false)
 
   // --- Estados do Formulário de Lançamento ---
@@ -86,11 +84,6 @@ export default function App() {
     const dd = String(today.getDate()).padStart(2, '0')
     return `${yyyy}-${mm}-${dd}`
   })
-
-  // --- Estados do Formulário de Meta ---
-  const [formMetaCategoria, setFormMetaCategoria] = useState('Casa')
-  const [formMetaValor, setFormMetaValor] = useState('')
-  const [formMetaDescricao, setFormMetaDescricao] = useState('')
 
   // --- Estados do Formulário de Poupança ---
   const [formPoupancaTotal, setFormPoupancaTotal] = useState('')
@@ -243,11 +236,9 @@ export default function App() {
   // Sincronizar dados locais se o Supabase não estiver ativo
   const loadLocalData = async () => {
     const loadedTxs = initialTransactions
-    const loadedMetas = initialMetas
     const loadedPoupancas = initialPoupanca
 
     setTransactions(loadedTxs)
-    setMetas(loadedMetas)
     setPoupancas(loadedPoupancas)
 
     const txsWithRecharge = await checkVRVARecharge(loadedTxs, false)
@@ -267,15 +258,7 @@ export default function App() {
 
         if (txError) throw txError
 
-        // Buscar metas
-        const { data: metasData, error: metasError } = await supabase
-          .from('metas')
-          .select('*')
-
-        if (metasError) throw metasError
-
         setTransactions(txData || [])
-        setMetas(metasData || [])
         setDbStatus('supabase_connected')
 
         // Buscar poupanças com tratamento resiliente individual
@@ -659,83 +642,6 @@ export default function App() {
     } catch (err) {
       console.error("Erro ao alternar status no Supabase:", err.message)
       alert("Erro ao alternar status no Supabase: " + err.message)
-    } finally {
-      setIsSyncing(false)
-    }
-  }
-
-  // --- Funções do Sistema de Metas ---
-  const handleSaveMeta = async (e) => {
-    e.preventDefault()
-    const valorMetaNum = parseBRL(formMetaValor)
-    if (isNaN(valorMetaNum) || valorMetaNum < 0) {
-      alert("Por favor, digite um valor de meta válido.")
-      return
-    }
-
-    if (!isSupabaseConfigured || dbStatus !== 'supabase_connected') {
-      alert("Operação não permitida: O Supabase não está conectado.")
-      return
-    }
-
-    const descricaoTrimmed = formMetaDescricao.trim()
-
-    setIsSyncing(true)
-    try {
-      const existing = metas.find(m => m.categoria === formMetaCategoria)
-      if (existing) {
-        const { error } = await supabase
-          .from('metas')
-          .update({ valor_meta: valorMetaNum, descricao: descricaoTrimmed })
-          .eq('categoria', formMetaCategoria)
-
-        if (error) throw error
-        setMetas(prev => prev.map(m => m.categoria === formMetaCategoria ? { ...m, valor_meta: valorMetaNum, descricao: descricaoTrimmed } : m))
-      } else {
-        const { data, error } = await supabase
-          .from('metas')
-          .insert([{ categoria: formMetaCategoria, valor_meta: valorMetaNum, descricao: descricaoTrimmed }])
-          .select()
-
-        if (error) throw error
-        if (data && data.length > 0) {
-          setMetas(prev => [...prev, data[0]])
-        } else {
-          loadData()
-        }
-      }
-      alert(`Meta para a categoria "${formMetaCategoria}" salva com sucesso!`)
-    } catch (err) {
-      console.error("Erro ao salvar meta no Supabase:", err.message)
-      alert("Erro no Supabase: " + err.message)
-    } finally {
-      setIsSyncing(false)
-    }
-    setFormMetaValor('')
-    setFormMetaDescricao('')
-  }
-
-  const handleDeleteMeta = async (categoria) => {
-    if (!window.confirm(`Deseja realmente excluir a meta da categoria "${categoria}"?`)) return
-
-    if (!isSupabaseConfigured || dbStatus !== 'supabase_connected') {
-      alert("Operação não permitida: O Supabase não está conectado.")
-      return
-    }
-
-    setIsSyncing(true)
-    try {
-      const { error } = await supabase
-        .from('metas')
-        .delete()
-        .eq('categoria', categoria)
-
-      if (error) throw error
-      setMetas(prev => prev.filter(m => m.categoria !== categoria))
-      alert(`Meta da categoria "${categoria}" excluída com sucesso!`)
-    } catch (err) {
-      console.error("Erro ao excluir meta no Supabase:", err.message)
-      alert("Erro ao excluir no Supabase: " + err.message)
     } finally {
       setIsSyncing(false)
     }
@@ -1465,13 +1371,6 @@ export default function App() {
           >
             Lançamentos
           </button>
-          <button
-            onClick={() => setActiveTab('metas')}
-            className={`py-3 px-6 -mb-px transition-all ${activeTab === 'metas' ? 'tab-active' : 'tab-inactive'
-              }`}
-          >
-            Configurar Metas
-          </button>
         </div>
       </nav>
 
@@ -2153,13 +2052,13 @@ export default function App() {
             </div>
 
             {/* --- Novo Layout: Dinheiro Livre, Vale Alimentação/Refeição e Progresso das Metas --- */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
               {/* Card de Dinheiro Livre (Donut Chart) */}
               <div className="glass-panel p-6 flex flex-col justify-between">
                 <div>
                   <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">Disponibilidade do Saldo</h3>
-                  <p className="text-xs text-slate-500 mb-6">Quanto do seu saldo em conta está livre após reservar o valor das contas pendentes do mês</p>
+                  <p className="text-xs text-slate-550 mb-6">Quanto do seu saldo em conta está livre após reservar o valor das contas pendentes do mês</p>
 
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
                     {/* Donut Chart */}
@@ -2270,7 +2169,7 @@ export default function App() {
                     <div className="space-y-1.5">
                       <div className="flex justify-between text-xs font-bold">
                         <span className="text-slate-705 dark:text-slate-300">Uso do Limite Mensal</span>
-                        <span className="text-slate-550">{pctVRVA.toFixed(0)}%</span>
+                        <span className="text-slate-555">{pctVRVA.toFixed(0)}%</span>
                       </div>
                       <div className="w-full bg-pink-50 dark:bg-orange-950/20 h-2.5 rounded-full overflow-hidden border border-pink-100/50 dark:border-orange-900/10">
                         <div
@@ -2297,68 +2196,6 @@ export default function App() {
                 <div className="mt-6 border-t border-pink-200 dark:border-amber-500/20 pt-4 flex justify-between items-center text-xs">
                   <span className="text-slate-555 dark:text-slate-450 font-medium">Recarga automática:</span>
                   <span className="font-bold text-slate-800 dark:text-slate-300">Todo dia 01</span>
-                </div>
-              </div>
-
-              {/* Card de Progresso das Metas (Progress Bars) */}
-              <div className="glass-panel p-6 flex flex-col justify-between">
-                <div>
-                  <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">Acompanhamento do Orçamento</h3>
-                  <p className="text-xs text-slate-500 mb-6">Comparação do total gasto real no mês contra os limites (metas) estabelecidos</p>
-
-                  <div className="space-y-4 max-h-[220px] overflow-y-auto pr-1">
-                    {metas.length > 0 ? (
-                      metas.map(meta => {
-                        // Calcula consumo real para a categoria no mês selecionado
-                        const spent = activeMonthTransactions
-                          .filter(t => t.categoria === meta.categoria && t.tipo === 'Despesa')
-                          .reduce((sum, t) => sum + t.valor, 0)
-                        const pct = meta.valor_meta > 0 ? (spent / meta.valor_meta) * 100 : 0
-
-                        return (
-                          <div key={meta.id} className="space-y-1.5">
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="font-bold text-slate-705 dark:text-slate-300 flex items-center gap-1.5">
-                                <span>{getCategoryIcon(meta.categoria)}</span>
-                                {meta.categoria}
-                              </span>
-                              <span className="text-slate-500 font-semibold">
-                                <span className="font-bold text-slate-705 dark:text-slate-200">{formatCurrency(spent)}</span>
-                                <span className="mx-1">/</span>
-                                {formatCurrency(meta.valor_meta)}
-                                <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold ${pct >= 100 ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-400' : 'bg-pink-100 text-pink-800 dark:bg-slate-850 dark:text-slate-300'}`}>
-                                  {pct.toFixed(0)}%
-                                </span>
-                              </span>
-                            </div>
-                            <div className={`w-full h-2 rounded-full overflow-hidden ${getProgressBgColor(pct)}`}>
-                              <div
-                                className={`h-full transition-all duration-550 ${getProgressBarColor(pct)}`}
-                                style={{ width: `${Math.min(100, pct)}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                        )
-                      })
-                    ) : (
-                      <div className="py-8 text-center">
-                        <p className="text-sm text-slate-500 italic">Nenhuma meta configurada ainda.</p>
-                        <button
-                          onClick={() => setActiveTab('metas')}
-                          className="mt-2 text-xs font-bold text-pink-600 hover:text-pink-700 dark:text-amber-400 dark:hover:text-amber-500 underline"
-                        >
-                          Ir para Configurações de Metas
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-6 border-t border-pink-200 dark:border-amber-500/20 pt-4 flex justify-between items-center text-xs">
-                  <span className="text-slate-555 dark:text-slate-450 font-medium">Orçamento Total Planejado:</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-300">
-                    {formatCurrency(metas.reduce((sum, m) => sum + m.valor_meta, 0))}
-                  </span>
                 </div>
               </div>
 
@@ -2830,7 +2667,7 @@ export default function App() {
                               </button>
                               <button
                                 onClick={() => handleDeleteTransaction(tx.id)}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-450 rounded-lg transition-all"
+                                className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-455 rounded-lg transition-all"
                                 title="Excluir Lançamento"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -2850,224 +2687,6 @@ export default function App() {
                 </table>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* --- Aba 3: Metas --- */}
-        {activeTab === 'metas' && (
-          <div className="max-w-2xl mx-auto space-y-6 animate-slide-in">
-
-            {/* Resumo de Metas */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="glass-panel p-4 flex items-center justify-between border-l-4 border-l-pink-550 dark:border-l-amber-500">
-                <div>
-                  <span className="text-xs font-semibold text-slate-550 dark:text-slate-450">Metas Ativas</span>
-                  <h4 className="text-lg font-bold text-slate-800 dark:text-slate-200 mt-1">{metas.length} Categoria(s)</h4>
-                </div>
-                <div className="p-2.5 bg-pink-100 dark:bg-slate-800 rounded-xl text-pink-600 dark:text-amber-400 shadow-inner">
-                  <Target className="h-5 w-5" />
-                </div>
-              </div>
-              <div className="glass-panel p-4 flex items-center justify-between border-l-4 border-l-pink-550 dark:border-l-amber-500">
-                <div>
-                  <span className="text-xs font-semibold text-slate-550 dark:text-slate-450">Limite de Gastos Mensal</span>
-                  <h4 className="text-lg font-bold text-slate-800 dark:text-slate-200 mt-1">
-                    {formatCurrency(metas.reduce((sum, m) => sum + m.valor_meta, 0))}
-                  </h4>
-                </div>
-                <div className="p-2.5 bg-pink-100 dark:bg-slate-800 rounded-xl text-pink-600 dark:text-amber-400 shadow-inner">
-                  <DollarSign className="h-5 w-5" />
-                </div>
-              </div>
-            </div>
-
-            {/* Card de Configuração de Meta */}
-            <div className="glass-panel p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2.5 bg-pink-100 dark:bg-slate-800 rounded-xl text-pink-650 dark:text-amber-400 shadow-inner">
-                  <SlidersHorizontal className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">Ajuste de Metas Familiares</h3>
-                  <p className="text-xs text-slate-500">Estipule limites mensais para controlar despesas por categoria</p>
-                </div>
-              </div>
-
-              <div className="border-t border-pink-200 dark:border-slate-800/50 pt-4 mt-4 space-y-6">
-
-                {/* Formulário para Nova Meta / Atualizar */}
-                <form onSubmit={handleSaveMeta} className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-600 dark:text-slate-400 block">Categoria</label>
-                      <div className="relative">
-                        <button
-                          type="button"
-                          onClick={() => setIsFormMetaCategoriaDropdownOpen(!isFormMetaCategoriaDropdownOpen)}
-                          className="flex items-center justify-between gap-2.5 w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-semibold outline-none cursor-pointer focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20 hover:bg-pink-100/50 dark:hover:bg-slate-750 transition-all text-left"
-                        >
-                          <span>
-                            {getCategoryIcon(formMetaCategoria)} {formMetaCategoria}
-                          </span>
-                          <ChevronDown className={`h-4.5 w-4.5 text-pink-600 dark:text-amber-400 transition-transform duration-200 ${isFormMetaCategoriaDropdownOpen ? 'rotate-180' : ''}`} />
-                        </button>
-
-                        {isFormMetaCategoriaDropdownOpen && (
-                          <>
-                            <div
-                              className="fixed inset-0 z-20"
-                              onClick={() => setIsFormMetaCategoriaDropdownOpen(false)}
-                            />
-                            <div className="absolute left-0 mt-2 w-full bg-pink-50/95 dark:bg-slate-900/95 backdrop-blur-md border border-pink-200 dark:border-amber-500/25 rounded-2xl shadow-xl py-1.5 z-30 max-h-60 overflow-y-auto animate-slide-up">
-                              {categoriasValidas.filter(c => c !== 'Transferência').map(c => {
-                                const isSelected = c === formMetaCategoria
-                                return (
-                                  <button
-                                    key={c}
-                                    type="button"
-                                    onClick={() => {
-                                      setFormMetaCategoria(c)
-                                      setIsFormMetaCategoriaDropdownOpen(false)
-                                    }}
-                                    className={`w-full text-left px-4 py-2 text-sm font-semibold transition-colors cursor-pointer ${isSelected
-                                      ? 'bg-pink-200/80 dark:bg-amber-500/25 text-pink-900 dark:text-amber-400 font-bold'
-                                      : 'text-pink-950 dark:text-slate-200 hover:bg-pink-200/40 dark:hover:bg-slate-800'
-                                      }`}
-                                  >
-                                    {getCategoryIcon(c)} {c}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-600 dark:text-slate-400 block">Valor Limite (R$)</label>
-                      <div className="relative rounded-xl shadow-sm">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <span className="text-slate-400 font-semibold text-xs">R$</span>
-                        </div>
-                        <input
-                          type="text"
-                          required
-                          value={formMetaValor}
-                          onChange={(e) => {
-                            const cleanDigits = e.target.value.replace(/\D/g, '');
-                            if (!cleanDigits) {
-                              setFormMetaValor('');
-                              return;
-                            }
-                            const cents = parseInt(cleanDigits, 10);
-                            if (cents === 0) {
-                              setFormMetaValor('');
-                              return;
-                            }
-                            const formatted = (cents / 100).toLocaleString('pt-BR', {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2
-                            });
-                            setFormMetaValor(formatted);
-                          }}
-                          placeholder="Ex: 1000,00"
-                          className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl pl-9 pr-4 py-2.5 text-sm text-pink-955 dark:text-white font-bold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-600 dark:text-slate-400 block">Descrição / Motivo da Meta</label>
-                    <input
-                      type="text"
-                      value={formMetaDescricao}
-                      onChange={(e) => setFormMetaDescricao(e.target.value)}
-                      placeholder="Ex: Controlar gastos com delivery e jantares fora"
-                      className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm text-pink-955 dark:text-white font-medium outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="btn-primary w-full h-[42px] py-0 flex items-center justify-center gap-2"
-                  >
-                    <Target className="h-4.5 w-4.5" />
-                    Salvar Meta
-                  </button>
-                </form>
-
-                {/* Listagem de Metas Ativas */}
-                <div className="mt-8 space-y-3">
-                  <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">Metas Ativas no Momento</h4>
-
-                  <div className="overflow-hidden rounded-xl border border-pink-200 dark:border-slate-800">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-pink-200/30 dark:bg-slate-900/60 text-pink-700 dark:text-amber-400 font-bold text-xs border-b border-pink-200 dark:border-amber-500/20">
-                          <th className="p-3">Categoria</th>
-                          <th className="p-3">Valor da Meta</th>
-                          <th className="p-3">Motivo / Descrição</th>
-                          <th className="p-3 text-center">Ações</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-pink-200/50 dark:divide-slate-800/40 text-sm">
-                        {metas.length > 0 ? (
-                          metas.map(meta => (
-                            <tr key={meta.id} className="hover:bg-pink-200/10 dark:hover:bg-slate-900/30 transition-colors">
-                              <td className="p-3 font-bold text-slate-800 dark:text-slate-200">
-                                {getCategoryIcon(meta.categoria)} {meta.categoria}
-                              </td>
-                              <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
-                                {formatCurrency(meta.valor_meta)}
-                              </td>
-                              <td className="p-3 text-slate-600 dark:text-slate-400 text-xs italic max-w-[200px] truncate" title={meta.descricao}>
-                                {meta.descricao || <span className="text-slate-400 dark:text-slate-600">Sem descrição</span>}
-                              </td>
-                              <td className="p-3 text-center">
-                                <div className="flex items-center justify-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setFormMetaCategoria(meta.categoria)
-                                      setFormMetaValor(meta.valor_meta.toString().replace('.', ','))
-                                      setFormMetaDescricao(meta.descricao || '')
-                                    }}
-                                    className="p-1 text-slate-400 hover:text-pink-650 dark:hover:text-amber-450 rounded transition-colors"
-                                    title="Editar Meta"
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteMeta(meta.categoria)}
-                                    className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded transition-colors"
-                                    title="Excluir Meta"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan="4" className="p-4 text-center text-xs text-slate-500">
-                              Nenhuma meta estipulada ainda. Defina uma meta acima.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-            {/* Informações explicativas sobre o Supabase removidas conforme solicitação do usuário */}
-
           </div>
         )}
 
