@@ -44,8 +44,6 @@ export default function App() {
   const [poupancas, setPoupancas] = useState([])
   const [isPoupancaModalOpen, setIsPoupancaModalOpen] = useState(false)
   const [theme, setTheme] = useState(() => {
-    const savedTheme = localStorage.getItem('financas_theme')
-    if (savedTheme) return savedTheme
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   })
   const [activeTab, setActiveTab] = useState('dashboard') // 'dashboard' | 'lancamentos' | 'metas'
@@ -141,7 +139,6 @@ export default function App() {
     } else {
       root.classList.remove('dark')
     }
-    localStorage.setItem('financas_theme', theme)
   }, [theme])
 
   useEffect(() => {
@@ -153,7 +150,7 @@ export default function App() {
   // garantindo redundância e funcionamento tanto offline (local) quanto direto no servidor.
   const checkMonthTurn = async (loadedTxs, isSupabaseActive) => {
     const todayStr = getTodayMonthStr()
-    const lastChecked = localStorage.getItem('financas_last_checked_month')
+    const lastChecked = sessionStorage.getItem('financas_last_checked_month')
 
     if (lastChecked && lastChecked !== todayStr) {
       const recurrenceRegex = /\(\d+\/\d+\)/
@@ -176,19 +173,6 @@ export default function App() {
           return t
         }))
 
-        // Atualizar localStorage
-        const savedTxsStr = localStorage.getItem('financas_transactions')
-        if (savedTxsStr) {
-          const localList = JSON.parse(savedTxsStr)
-          const updatedLocal = localList.map(t => {
-            if (updatedIds.has(t.id)) {
-              return { ...t, status: 'Pendente' }
-            }
-            return t
-          })
-          localStorage.setItem('financas_transactions', JSON.stringify(updatedLocal))
-        }
-
         // Atualizar Supabase se conectado
         if (isSupabaseActive && isSupabaseConfigured) {
           try {
@@ -207,7 +191,7 @@ export default function App() {
       }
     }
 
-    localStorage.setItem('financas_last_checked_month', todayStr)
+    sessionStorage.setItem('financas_last_checked_month', todayStr)
   }
 
   // Função para verificar e gerar a recarga mensal automática do Vale Alimentação/Refeição Flexível (R$ 1.004,00)
@@ -250,7 +234,6 @@ export default function App() {
 
       const updatedTxs = [newRecharge, ...loadedTxs]
       setTransactions(updatedTxs)
-      localStorage.setItem('financas_transactions', JSON.stringify(updatedTxs))
       return updatedTxs
     }
 
@@ -259,34 +242,9 @@ export default function App() {
 
   // Sincronizar dados locais se o Supabase não estiver ativo
   const loadLocalData = async () => {
-    const savedTxs = localStorage.getItem('financas_transactions')
-    const savedMetas = localStorage.getItem('financas_metas')
-    const savedPoupancas = localStorage.getItem('financas_poupanca')
-
-    let loadedTxs = []
-    let loadedMetas = []
-    let loadedPoupancas = []
-
-    if (savedTxs) {
-      loadedTxs = JSON.parse(savedTxs)
-    } else {
-      loadedTxs = initialTransactions
-      localStorage.setItem('financas_transactions', JSON.stringify(initialTransactions))
-    }
-
-    if (savedMetas) {
-      loadedMetas = JSON.parse(savedMetas)
-    } else {
-      loadedMetas = initialMetas
-      localStorage.setItem('financas_metas', JSON.stringify(initialMetas))
-    }
-
-    if (savedPoupancas) {
-      loadedPoupancas = JSON.parse(savedPoupancas)
-    } else {
-      loadedPoupancas = initialPoupanca
-      localStorage.setItem('financas_poupanca', JSON.stringify(initialPoupanca))
-    }
+    const loadedTxs = initialTransactions
+    const loadedMetas = initialMetas
+    const loadedPoupancas = initialPoupanca
 
     setTransactions(loadedTxs)
     setMetas(loadedMetas)
@@ -300,78 +258,7 @@ export default function App() {
     if (isSupabaseConfigured) {
       setIsSyncing(true)
       try {
-        // --- 1. Sincronização Inteligente de Lançamentos Offline ---
-        const savedTxs = localStorage.getItem('financas_transactions');
-        let localOfflineTxs = [];
-        if (savedTxs) {
-          try {
-            const parsed = JSON.parse(savedTxs);
-            localOfflineTxs = parsed.filter(t => t.id && t.id.toString().startsWith('tx-'));
-          } catch (e) {
-            console.error("Erro ao ler LocalStorage para sync:", e);
-          }
-        }
-
-        if (localOfflineTxs.length > 0) {
-          console.log(`Sincronizando ${localOfflineTxs.length} transação(ões) offline para o Supabase...`);
-
-          const rendaExtraTxs = localOfflineTxs.filter(t => t.categoria === 'Renda Extra' && t.tipo === 'Receita');
-          const outrasTxs = localOfflineTxs.filter(t => !(t.categoria === 'Renda Extra' && t.tipo === 'Receita'));
-
-          const idMap = {};
-          const formatDateBR = (dateStr) => {
-            if (!dateStr) return '';
-            const parts = dateStr.split('-');
-            return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : dateStr;
-          };
-
-          if (rendaExtraTxs.length > 0) {
-            const txsToInsert = rendaExtraTxs.map(({ id, criado_em, ...rest }) => ({
-              ...rest,
-              criado_em: criado_em || new Date().toISOString()
-            }));
-            const { data: insertedRenda, error: insertError } = await supabase
-              .from('transacoes')
-              .insert(txsToInsert)
-              .select();
-
-            if (!insertError && insertedRenda) {
-              rendaExtraTxs.forEach((origTx, idx) => {
-                if (insertedRenda[idx]) {
-                  idMap[origTx.id] = insertedRenda[idx].id;
-                }
-              });
-            } else if (insertError) {
-              console.error("Erro ao sincronizar Renda Extra:", insertError.message);
-            }
-          }
-
-          const outrasTxsToInsert = outrasTxs.map(({ id, criado_em, ...rest }) => {
-            let subcat = rest.subcategoria || '';
-            Object.keys(idMap).forEach(oldId => {
-              if (subcat.includes(`[Ref: ${oldId}]`)) {
-                subcat = subcat.replace(`[Ref: ${oldId}]`, `[Ref: ${idMap[oldId]}]`);
-              }
-            });
-            return {
-              ...rest,
-              subcategoria: subcat,
-              criado_em: criado_em || new Date().toISOString()
-            };
-          });
-
-          if (outrasTxsToInsert.length > 0) {
-            const { error: insertError } = await supabase
-              .from('transacoes')
-              .insert(outrasTxsToInsert);
-
-            if (insertError) {
-              console.error("Erro ao sincronizar demais transações:", insertError.message);
-            }
-          }
-        }
-
-        // --- 2. Busca e Atualização do Estado ---
+        // --- 1. Busca e Atualização do Estado ---
         // Buscar transações
         const { data: txData, error: txError } = await supabase
           .from('transacoes')
@@ -391,10 +278,6 @@ export default function App() {
         setMetas(metasData || [])
         setDbStatus('supabase_connected')
 
-        // Atualizar cache local
-        localStorage.setItem('financas_transactions', JSON.stringify(txData || []));
-        localStorage.setItem('financas_metas', JSON.stringify(metasData || []));
-
         // Buscar poupanças com tratamento resiliente individual
         try {
           const { data: poupancaData, error: poupancaError } = await supabase
@@ -402,16 +285,9 @@ export default function App() {
             .select('*')
           if (poupancaError) throw poupancaError
           setPoupancas(poupancaData || [])
-          localStorage.setItem('financas_poupanca', JSON.stringify(poupancaData || []));
         } catch (pPerr) {
-          console.warn("Tabela 'poupancas' nao encontrada no Supabase. Carregando dados locais:", pPerr.message)
-          const savedPoupancas = localStorage.getItem('financas_poupanca')
-          if (savedPoupancas) {
-            setPoupancas(JSON.parse(savedPoupancas))
-          } else {
-            setPoupancas(initialPoupanca)
-            localStorage.setItem('financas_poupanca', JSON.stringify(initialPoupanca))
-          }
+          console.warn("Tabela 'poupancas' nao encontrada no Supabase. Carregando dados iniciais:", pPerr.message)
+          setPoupancas(initialPoupanca)
         }
         const txsWithRecharge = await checkVRVARecharge(txData || [], true)
         checkMonthTurn(txsWithRecharge, true)
@@ -493,6 +369,11 @@ export default function App() {
       return
     }
 
+    if (!isSupabaseConfigured || dbStatus !== 'supabase_connected') {
+      alert("Operação não permitida: O Supabase não está conectado.")
+      return
+    }
+
     const subcategoriaCapitalized = capitalizeWords(formSubcategoria.trim()) || 'Outros'
 
     const txData = {
@@ -538,166 +419,91 @@ export default function App() {
         })
       }
 
-      if (isSupabaseConfigured && dbStatus === 'supabase_connected') {
-        setIsSyncing(true)
-        try {
-          const { data: updateData, error: updateError } = await supabase
+      setIsSyncing(true)
+      try {
+        const { data: updateData, error: updateError } = await supabase
+          .from('transacoes')
+          .update(mainTxData)
+          .eq('id', editingTransactionId)
+          .select()
+
+        if (updateError) throw updateError
+
+        let insertedData = []
+        if (extraTxsToInsert.length > 0) {
+          const { data: insData, error: insError } = await supabase
             .from('transacoes')
-            .update(mainTxData)
-            .eq('id', editingTransactionId)
+            .insert(extraTxsToInsert)
             .select()
+          if (insError) throw insError
+          insertedData = insData || []
+        }
 
-          if (updateError) throw updateError
+        if (updateData && updateData.length > 0) {
+          const updatedTx = updateData[0];
 
-          let insertedData = []
-          if (extraTxsToInsert.length > 0) {
-            const { data: insData, error: insError } = await supabase
-              .from('transacoes')
-              .insert(extraTxsToInsert)
-              .select()
-            if (insError) throw insError
-            insertedData = insData || []
-          }
-
-          if (updateData && updateData.length > 0) {
-            const updatedTx = updateData[0];
-
-            // Sync Dízimo in Supabase
-            const isRendaExtra = updatedTx.categoria === 'Renda Extra' && updatedTx.tipo === 'Receita';
-            const refString = `[Ref: ${editingTransactionId}]`;
-            const existingDizimo = transactions.find(t => t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString));
-
-            let finalDizimo = null;
-            if (isRendaExtra) {
-              const targetDizimo = {
-                data_referencia: updatedTx.data_referencia,
-                tipo: 'Despesa',
-                categoria: 'Dízimo',
-                subcategoria: `Dízimo 10% - Renda Extra (${formatDate(updatedTx.data_referencia)}) ${refString}`,
-                valor: updatedTx.valor * 0.1,
-                quem_pagou: updatedTx.quem_pagou,
-                status: updatedTx.status
-              };
-
-              if (existingDizimo) {
-                const { data: dizimoData } = await supabase
-                  .from('transacoes')
-                  .update(targetDizimo)
-                  .eq('id', existingDizimo.id)
-                  .select();
-                if (dizimoData && dizimoData.length > 0) {
-                  finalDizimo = dizimoData[0];
-                }
-              } else {
-                const { data: dizimoData } = await supabase
-                  .from('transacoes')
-                  .insert([{ ...targetDizimo, criado_em: new Date().toISOString() }])
-                  .select();
-                if (dizimoData && dizimoData.length > 0) {
-                  finalDizimo = dizimoData[0];
-                }
-              }
-            } else {
-              if (existingDizimo) {
-                await supabase.from('transacoes').delete().eq('id', existingDizimo.id);
-              }
-            }
-
-            setTransactions(prev => {
-              let updatedList = prev.map(t => t.id === editingTransactionId ? updatedTx : t);
-              if (existingDizimo) {
-                if (isRendaExtra && finalDizimo) {
-                  updatedList = updatedList.map(t => t.id === existingDizimo.id ? finalDizimo : t);
-                } else if (!isRendaExtra) {
-                  updatedList = updatedList.filter(t => t.id !== existingDizimo.id);
-                }
-              } else if (isRendaExtra && finalDizimo) {
-                updatedList = [finalDizimo, ...updatedList];
-              }
-              return [...insertedData, ...updatedList];
-            });
-          } else {
-            loadData()
-          }
-        } catch (err) {
-          console.error("Erro ao atualizar no Supabase, atualizando localmente:", err.message)
-          alert("Erro no Supabase. Lançamento atualizado localmente.")
-          const localTxs = extraTxsToInsert.map((tx, idx) => ({ ...tx, id: 'tx-' + (Date.now() + idx + 1) }))
-          const updated = transactions.map(t => t.id === editingTransactionId ? { ...t, ...mainTxData } : t)
-
-          let finalTxs = [...localTxs, ...updated]
-          // Sync dízimo locally
-          const isRendaExtra = mainTxData.categoria === 'Renda Extra' && mainTxData.tipo === 'Receita';
+          // Sync Dízimo in Supabase
+          const isRendaExtra = updatedTx.categoria === 'Renda Extra' && updatedTx.tipo === 'Receita';
           const refString = `[Ref: ${editingTransactionId}]`;
-          const existingDizimo = finalTxs.find(t => t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString));
+          const existingDizimo = transactions.find(t => t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString));
 
+          let finalDizimo = null;
           if (isRendaExtra) {
             const targetDizimo = {
-              data_referencia: mainTxData.data_referencia,
+              data_referencia: updatedTx.data_referencia,
               tipo: 'Despesa',
               categoria: 'Dízimo',
-              subcategoria: `Dízimo 10% - Renda Extra (${formatDate(mainTxData.data_referencia)}) ${refString}`,
-              valor: mainTxData.valor * 0.1,
-              quem_pagou: mainTxData.quem_pagou,
-              status: mainTxData.status
+              subcategoria: `Dízimo 10% - Renda Extra (${formatDate(updatedTx.data_referencia)}) ${refString}`,
+              valor: updatedTx.valor * 0.1,
+              quem_pagou: updatedTx.quem_pagou,
+              status: updatedTx.status
             };
+
             if (existingDizimo) {
-              finalTxs = finalTxs.map(t => t.id === existingDizimo.id ? { ...t, ...targetDizimo } : t);
+              const { data: dizimoData } = await supabase
+                .from('transacoes')
+                .update(targetDizimo)
+                .eq('id', existingDizimo.id)
+                .select();
+              if (dizimoData && dizimoData.length > 0) {
+                finalDizimo = dizimoData[0];
+              }
             } else {
-              const localDizimo = {
-                ...targetDizimo,
-                id: 'tx-dizimo-' + Date.now(),
-                criado_em: new Date().toISOString()
-              };
-              finalTxs = [localDizimo, ...finalTxs];
+              const { data: dizimoData } = await supabase
+                .from('transacoes')
+                .insert([{ ...targetDizimo, criado_em: new Date().toISOString() }])
+                .select();
+              if (dizimoData && dizimoData.length > 0) {
+                finalDizimo = dizimoData[0];
+              }
             }
           } else {
             if (existingDizimo) {
-              finalTxs = finalTxs.filter(t => t.id !== existingDizimo.id);
+              await supabase.from('transacoes').delete().eq('id', existingDizimo.id);
             }
           }
-          setTransactions(finalTxs)
-          localStorage.setItem('financas_transactions', JSON.stringify(finalTxs))
-        } finally {
-          setIsSyncing(false)
-        }
-      } else {
-        const localTxs = extraTxsToInsert.map((tx, idx) => ({ ...tx, id: 'tx-' + (Date.now() + idx + 1) }))
-        const updated = transactions.map(t => t.id === editingTransactionId ? { ...t, ...mainTxData } : t)
 
-        let finalTxs = [...localTxs, ...updated]
-        // Sync dízimo locally
-        const isRendaExtra = mainTxData.categoria === 'Renda Extra' && mainTxData.tipo === 'Receita';
-        const refString = `[Ref: ${editingTransactionId}]`;
-        const existingDizimo = finalTxs.find(t => t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString));
-
-        if (isRendaExtra) {
-          const targetDizimo = {
-            data_referencia: mainTxData.data_referencia,
-            tipo: 'Despesa',
-            categoria: 'Dízimo',
-            subcategoria: `Dízimo 10% - Renda Extra (${formatDate(mainTxData.data_referencia)}) ${refString}`,
-            valor: mainTxData.valor * 0.1,
-            quem_pagou: mainTxData.quem_pagou,
-            status: mainTxData.status
-          };
-          if (existingDizimo) {
-            finalTxs = finalTxs.map(t => t.id === existingDizimo.id ? { ...t, ...targetDizimo } : t);
-          } else {
-            const localDizimo = {
-              ...targetDizimo,
-              id: 'tx-dizimo-' + Date.now(),
-              criado_em: new Date().toISOString()
-            };
-            finalTxs = [localDizimo, ...finalTxs];
-          }
+          setTransactions(prev => {
+            let updatedList = prev.map(t => t.id === editingTransactionId ? updatedTx : t);
+            if (existingDizimo) {
+              if (isRendaExtra && finalDizimo) {
+                updatedList = updatedList.map(t => t.id === existingDizimo.id ? finalDizimo : t);
+              } else if (!isRendaExtra) {
+                updatedList = updatedList.filter(t => t.id !== existingDizimo.id);
+              }
+            } else if (isRendaExtra && finalDizimo) {
+              updatedList = [finalDizimo, ...updatedList];
+            }
+            return [...insertedData, ...updatedList];
+          });
         } else {
-          if (existingDizimo) {
-            finalTxs = finalTxs.filter(t => t.id !== existingDizimo.id);
-          }
+          loadData()
         }
-        setTransactions(finalTxs)
-        localStorage.setItem('financas_transactions', JSON.stringify(finalTxs))
+      } catch (err) {
+        console.error("Erro ao atualizar no Supabase:", err.message)
+        alert("Erro no Supabase: " + err.message)
+      } finally {
+        setIsSyncing(false)
       }
     } else {
       // Modo Criação com recorrência
@@ -722,56 +528,51 @@ export default function App() {
         })
       }
 
-      if (isSupabaseConfigured && dbStatus === 'supabase_connected') {
-        setIsSyncing(true)
-        try {
-          const { data, error } = await supabase
-            .from('transacoes')
-            .insert(txsToInsert)
-            .select()
+      setIsSyncing(true)
+      try {
+        const { data, error } = await supabase
+          .from('transacoes')
+          .insert(txsToInsert)
+          .select()
 
-          if (error) throw error
+        if (error) throw error
 
-          if (data && data.length > 0) {
-            // Generate dizimo for Supabase
-            const dizimoTxs = data
-              .filter(t => t.categoria === 'Renda Extra' && t.tipo === 'Receita')
-              .map(t => ({
-                criado_em: new Date().toISOString(),
-                data_referencia: t.data_referencia,
-                tipo: 'Despesa',
-                categoria: 'Dízimo',
-                subcategoria: `Dízimo 10% - Renda Extra (${formatDate(t.data_referencia)}) [Ref: ${t.id}]`,
-                valor: t.valor * 0.1,
-                quem_pagou: t.quem_pagou,
-                status: t.status
-              }))
+        if (data && data.length > 0) {
+          // Generate dizimo for Supabase
+          const dizimoTxs = data
+            .filter(t => t.categoria === 'Renda Extra' && t.tipo === 'Receita')
+            .map(t => ({
+              criado_em: new Date().toISOString(),
+              data_referencia: t.data_referencia,
+              tipo: 'Despesa',
+              categoria: 'Dízimo',
+              subcategoria: `Dízimo 10% - Renda Extra (${formatDate(t.data_referencia)}) [Ref: ${t.id}]`,
+              valor: t.valor * 0.1,
+              quem_pagou: t.quem_pagou,
+              status: t.status
+            }))
 
-            if (dizimoTxs.length > 0) {
-              const { data: dizimoData, error: dizimoError } = await supabase
-                .from('transacoes')
-                .insert(dizimoTxs)
-                .select()
-              if (!dizimoError && dizimoData) {
-                setTransactions(prev => [...dizimoData, ...data, ...prev])
-              } else {
-                setTransactions(prev => [...data, ...prev])
-              }
+          if (dizimoTxs.length > 0) {
+            const { data: dizimoData, error: dizimoError } = await supabase
+              .from('transacoes')
+              .insert(dizimoTxs)
+              .select()
+            if (!dizimoError && dizimoData) {
+              setTransactions(prev => [...dizimoData, ...data, ...prev])
             } else {
               setTransactions(prev => [...data, ...prev])
             }
           } else {
-            loadData()
+            setTransactions(prev => [...data, ...prev])
           }
-        } catch (err) {
-          console.error("Erro ao salvar no Supabase, gravando localmente:", err.message)
-          alert("Erro ao conectar com o Supabase. Lançamento(s) salvo(s) localmente no navegador.")
-          saveTxsLocal(txsToInsert)
-        } finally {
-          setIsSyncing(false)
+        } else {
+          loadData()
         }
-      } else {
-        saveTxsLocal(txsToInsert)
+      } catch (err) {
+        console.error("Erro ao salvar no Supabase:", err.message)
+        alert("Erro no Supabase: " + err.message)
+      } finally {
+        setIsSyncing(false)
       }
     }
 
@@ -788,124 +589,79 @@ export default function App() {
     setIsModalOpen(false)
   }
 
-  const saveTxsLocal = (newTxs) => {
-    const localTxs = newTxs.map((tx, idx) => ({ ...tx, id: 'tx-' + (Date.now() + idx) }))
-
-    // Generate dizimo for local
-    const dizimoTxs = localTxs
-      .filter(t => t.categoria === 'Renda Extra' && t.tipo === 'Receita')
-      .map((t, idx) => ({
-        id: 'tx-dizimo-' + (Date.now() + localTxs.length + idx),
-        criado_em: new Date().toISOString(),
-        data_referencia: t.data_referencia,
-        tipo: 'Despesa',
-        categoria: 'Dízimo',
-        subcategoria: `Dízimo 10% - Renda Extra (${formatDate(t.data_referencia)}) [Ref: ${t.id}]`,
-        valor: t.valor * 0.1,
-        quem_pagou: t.quem_pagou,
-        status: t.status
-      }))
-
-    const updated = [...dizimoTxs, ...localTxs, ...transactions]
-    setTransactions(updated)
-    localStorage.setItem('financas_transactions', JSON.stringify(updated))
-  }
-
-  const updateTxLocal = (id, txData) => {
-    const updated = transactions.map(t => t.id === id ? { ...t, ...txData } : t)
-    setTransactions(updated)
-    localStorage.setItem('financas_transactions', JSON.stringify(updated))
-  }
-
   // --- Função para Deletar Transação ---
   const handleDeleteTransaction = async (id) => {
     if (!window.confirm("Deseja realmente excluir esta transação?")) return
 
-    if (isSupabaseConfigured && dbStatus === 'supabase_connected') {
-      setIsSyncing(true)
-      try {
-        const { error } = await supabase
-          .from('transacoes')
-          .delete()
-          .eq('id', id)
-
-        if (error) throw error
-
-        // Delete linked dízimo in Supabase
-        const refString = `[Ref: ${id}]`
-        const linkedDizimo = transactions.find(t => t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString))
-        if (linkedDizimo) {
-          await supabase.from('transacoes').delete().eq('id', linkedDizimo.id)
-        }
-
-        setTransactions(prev => prev.filter(t => t.id !== id && (!linkedDizimo || t.id !== linkedDizimo.id)))
-      } catch (err) {
-        console.error("Erro ao excluir do Supabase, excluindo localmente:", err.message)
-        deleteTxLocal(id)
-      } finally {
-        setIsSyncing(false)
-      }
-    } else {
-      deleteTxLocal(id)
+    if (!isSupabaseConfigured || dbStatus !== 'supabase_connected') {
+      alert("Operação não permitida: O Supabase não está conectado.")
+      return
     }
-  }
 
-  const deleteTxLocal = (id) => {
-    const refString = `[Ref: ${id}]`
-    const updated = transactions.filter(t => t.id !== id && !(t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString)))
-    setTransactions(updated)
-    localStorage.setItem('financas_transactions', JSON.stringify(updated))
+    setIsSyncing(true)
+    try {
+      const { error } = await supabase
+        .from('transacoes')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+
+      // Delete linked dízimo in Supabase
+      const refString = `[Ref: ${id}]`
+      const linkedDizimo = transactions.find(t => t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString))
+      if (linkedDizimo) {
+        await supabase.from('transacoes').delete().eq('id', linkedDizimo.id)
+      }
+
+      setTransactions(prev => prev.filter(t => t.id !== id && (!linkedDizimo || t.id !== linkedDizimo.id)))
+    } catch (err) {
+      console.error("Erro ao excluir do Supabase:", err.message)
+      alert("Erro ao excluir do Supabase: " + err.message)
+    } finally {
+      setIsSyncing(false)
+    }
   }
 
   // --- Função para Alternar Status da Transação (Pago/Pendente) ---
   const toggleTransactionStatus = async (tx) => {
     const newStatus = tx.status === 'Pago' ? 'Pendente' : 'Pago'
 
-    if (isSupabaseConfigured && dbStatus === 'supabase_connected') {
-      setIsSyncing(true)
-      try {
-        const { error } = await supabase
+    if (!isSupabaseConfigured || dbStatus !== 'supabase_connected') {
+      alert("Operação não permitida: O Supabase não está conectado.")
+      return
+    }
+
+    setIsSyncing(true)
+    try {
+      const { error } = await supabase
+        .from('transacoes')
+        .update({ status: newStatus })
+        .eq('id', tx.id)
+
+      if (error) throw error
+
+      // Toggle linked dízimo status in Supabase
+      const refString = `[Ref: ${tx.id}]`
+      const linkedDizimo = transactions.find(t => t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString))
+      if (linkedDizimo) {
+        await supabase
           .from('transacoes')
           .update({ status: newStatus })
-          .eq('id', tx.id)
-
-        if (error) throw error
-
-        // Toggle linked dízimo status in Supabase
-        const refString = `[Ref: ${tx.id}]`
-        const linkedDizimo = transactions.find(t => t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString))
-        if (linkedDizimo) {
-          await supabase
-            .from('transacoes')
-            .update({ status: newStatus })
-            .eq('id', linkedDizimo.id)
-        }
-
-        setTransactions(prev => prev.map(t => {
-          if (t.id === tx.id) return { ...t, status: newStatus };
-          if (linkedDizimo && t.id === linkedDizimo.id) return { ...t, status: newStatus };
-          return t;
-        }))
-      } catch (err) {
-        console.error("Erro ao alternar status no Supabase, alterando localmente:", err.message)
-        toggleTxStatusLocal(tx.id, newStatus)
-      } finally {
-        setIsSyncing(false)
+          .eq('id', linkedDizimo.id)
       }
-    } else {
-      toggleTxStatusLocal(tx.id, newStatus)
-    }
-  }
 
-  const toggleTxStatusLocal = (id, newStatus) => {
-    const refString = `[Ref: ${id}]`
-    const updated = transactions.map(t => {
-      if (t.id === id) return { ...t, status: newStatus };
-      if (t.categoria === 'Dízimo' && t.tipo === 'Despesa' && t.subcategoria.includes(refString)) return { ...t, status: newStatus };
-      return t;
-    })
-    setTransactions(updated)
-    localStorage.setItem('financas_transactions', JSON.stringify(updated))
+      setTransactions(prev => prev.map(t => {
+        if (t.id === tx.id) return { ...t, status: newStatus };
+        if (linkedDizimo && t.id === linkedDizimo.id) return { ...t, status: newStatus };
+        return t;
+      }))
+    } catch (err) {
+      console.error("Erro ao alternar status no Supabase:", err.message)
+      alert("Erro ao alternar status no Supabase: " + err.message)
+    } finally {
+      setIsSyncing(false)
+    }
   }
 
   // --- Funções do Sistema de Metas ---
@@ -916,44 +672,44 @@ export default function App() {
       alert("Por favor, digite um valor de meta válido.")
       return
     }
+
+    if (!isSupabaseConfigured || dbStatus !== 'supabase_connected') {
+      alert("Operação não permitida: O Supabase não está conectado.")
+      return
+    }
+
     const descricaoTrimmed = formMetaDescricao.trim()
 
-    if (isSupabaseConfigured && dbStatus === 'supabase_connected') {
-      setIsSyncing(true)
-      try {
-        const existing = metas.find(m => m.categoria === formMetaCategoria)
-        if (existing) {
-          const { error } = await supabase
-            .from('metas')
-            .update({ valor_meta: valorMetaNum, descricao: descricaoTrimmed })
-            .eq('categoria', formMetaCategoria)
+    setIsSyncing(true)
+    try {
+      const existing = metas.find(m => m.categoria === formMetaCategoria)
+      if (existing) {
+        const { error } = await supabase
+          .from('metas')
+          .update({ valor_meta: valorMetaNum, descricao: descricaoTrimmed })
+          .eq('categoria', formMetaCategoria)
 
-          if (error) throw error
-          setMetas(prev => prev.map(m => m.categoria === formMetaCategoria ? { ...m, valor_meta: valorMetaNum, descricao: descricaoTrimmed } : m))
+        if (error) throw error
+        setMetas(prev => prev.map(m => m.categoria === formMetaCategoria ? { ...m, valor_meta: valorMetaNum, descricao: descricaoTrimmed } : m))
+      } else {
+        const { data, error } = await supabase
+          .from('metas')
+          .insert([{ categoria: formMetaCategoria, valor_meta: valorMetaNum, descricao: descricaoTrimmed }])
+          .select()
+
+        if (error) throw error
+        if (data && data.length > 0) {
+          setMetas(prev => [...prev, data[0]])
         } else {
-          const { data, error } = await supabase
-            .from('metas')
-            .insert([{ categoria: formMetaCategoria, valor_meta: valorMetaNum, descricao: descricaoTrimmed }])
-            .select()
-
-          if (error) throw error
-          if (data && data.length > 0) {
-            setMetas(prev => [...prev, data[0]])
-          } else {
-            loadData()
-          }
+          loadData()
         }
-        alert(`Meta para a categoria "${formMetaCategoria}" salva com sucesso!`)
-      } catch (err) {
-        console.error("Erro ao salvar meta no Supabase, salvando localmente:", err.message)
-        alert("Erro no Supabase. Meta salva localmente.")
-        saveMetaLocal(formMetaCategoria, valorMetaNum, descricaoTrimmed)
-      } finally {
-        setIsSyncing(false)
       }
-    } else {
-      saveMetaLocal(formMetaCategoria, valorMetaNum, descricaoTrimmed)
-      alert(`Meta para a categoria "${formMetaCategoria}" salva localmente!`)
+      alert(`Meta para a categoria "${formMetaCategoria}" salva com sucesso!`)
+    } catch (err) {
+      console.error("Erro ao salvar meta no Supabase:", err.message)
+      alert("Erro no Supabase: " + err.message)
+    } finally {
+      setIsSyncing(false)
     }
     setFormMetaValor('')
     setFormMetaDescricao('')
@@ -962,46 +718,27 @@ export default function App() {
   const handleDeleteMeta = async (categoria) => {
     if (!window.confirm(`Deseja realmente excluir a meta da categoria "${categoria}"?`)) return
 
-    if (isSupabaseConfigured && dbStatus === 'supabase_connected') {
-      setIsSyncing(true)
-      try {
-        const { error } = await supabase
-          .from('metas')
-          .delete()
-          .eq('categoria', categoria)
-
-        if (error) throw error
-        setMetas(prev => prev.filter(m => m.categoria !== categoria))
-        alert(`Meta da categoria "${categoria}" excluída com sucesso!`)
-      } catch (err) {
-        console.error("Erro ao excluir meta no Supabase, removendo localmente:", err.message)
-        alert("Erro ao excluir no Supabase. Removendo localmente.")
-        deleteMetaLocal(categoria)
-      } finally {
-        setIsSyncing(false)
-      }
-    } else {
-      deleteMetaLocal(categoria)
-      alert(`Meta da categoria "${categoria}" excluída localmente!`)
+    if (!isSupabaseConfigured || dbStatus !== 'supabase_connected') {
+      alert("Operação não permitida: O Supabase não está conectado.")
+      return
     }
-  }
 
-  const saveMetaLocal = (categoria, valorMeta, descricao) => {
-    let updated
-    const existing = metas.find(m => m.categoria === categoria)
-    if (existing) {
-      updated = metas.map(m => m.categoria === categoria ? { ...m, valor_meta: valorMeta, descricao } : m)
-    } else {
-      updated = [...metas, { id: 'meta-' + Date.now(), categoria, valor_meta: valorMeta, descricao }]
+    setIsSyncing(true)
+    try {
+      const { error } = await supabase
+        .from('metas')
+        .delete()
+        .eq('categoria', categoria)
+
+      if (error) throw error
+      setMetas(prev => prev.filter(m => m.categoria !== categoria))
+      alert(`Meta da categoria "${categoria}" excluída com sucesso!`)
+    } catch (err) {
+      console.error("Erro ao excluir meta no Supabase:", err.message)
+      alert("Erro ao excluir no Supabase: " + err.message)
+    } finally {
+      setIsSyncing(false)
     }
-    setMetas(updated)
-    localStorage.setItem('financas_metas', JSON.stringify(updated))
-  }
-
-  const deleteMetaLocal = (categoria) => {
-    const updated = metas.filter(m => m.categoria !== categoria)
-    setMetas(updated)
-    localStorage.setItem('financas_metas', JSON.stringify(updated))
   }
 
   // --- Funções do Sistema de Poupança (Dinheiro Guardado) ---
@@ -1013,40 +750,39 @@ export default function App() {
       return
     }
 
-    if (isSupabaseConfigured && dbStatus === 'supabase_connected') {
-      setIsSyncing(true)
-      try {
-        const existing = poupancas.find(p => p.motivo === 'Total')
-        if (existing) {
-          const { error } = await supabase
-            .from('poupancas')
-            .update({ valor: valorNum })
-            .eq('motivo', 'Total')
-          if (error) throw error
-          setPoupancas(prev => prev.map(p => p.motivo === 'Total' ? { ...p, valor: valorNum } : p))
+    if (!isSupabaseConfigured || dbStatus !== 'supabase_connected') {
+      alert("Operação não permitida: O Supabase não está conectado.")
+      return
+    }
+
+    setIsSyncing(true)
+    try {
+      const existing = poupancas.find(p => p.motivo === 'Total')
+      if (existing) {
+        const { error } = await supabase
+          .from('poupancas')
+          .update({ valor: valorNum })
+          .eq('motivo', 'Total')
+        if (error) throw error
+        setPoupancas(prev => prev.map(p => p.motivo === 'Total' ? { ...p, valor: valorNum } : p))
+      } else {
+        const { data, error } = await supabase
+          .from('poupancas')
+          .insert([{ motivo: 'Total', valor: valorNum }])
+          .select()
+        if (error) throw error
+        if (data && data.length > 0) {
+          setPoupancas(prev => [...prev, data[0]])
         } else {
-          const { data, error } = await supabase
-            .from('poupancas')
-            .insert([{ motivo: 'Total', valor: valorNum }])
-            .select()
-          if (error) throw error
-          if (data && data.length > 0) {
-            setPoupancas(prev => [...prev, data[0]])
-          } else {
-            loadData()
-          }
+          loadData()
         }
-        alert("Saldo total guardado atualizado com sucesso!")
-      } catch (err) {
-        console.warn("Erro ao atualizar poupança no Supabase, salvando localmente:", err.message)
-        savePoupancaLocal('Total', valorNum)
-        alert("Saldo total atualizado localmente.")
-      } finally {
-        setIsSyncing(false)
       }
-    } else {
-      savePoupancaLocal('Total', valorNum)
-      alert("Saldo total atualizado localmente!")
+      alert("Saldo total guardado atualizado com sucesso!")
+    } catch (err) {
+      console.warn("Erro ao atualizar poupança no Supabase:", err.message)
+      alert("Erro no Supabase: " + err.message)
+    } finally {
+      setIsSyncing(false)
     }
   }
 
@@ -1067,46 +803,45 @@ export default function App() {
       return
     }
 
-    if (isSupabaseConfigured && dbStatus === 'supabase_connected') {
-      setIsSyncing(true)
-      try {
-        let existing = null
-        if (editingPoupancaId) {
-          existing = poupancas.find(p => p.id === editingPoupancaId)
-        } else {
-          existing = poupancas.find(p => p.motivo.toLowerCase() === motivoNome.toLowerCase())
-        }
+    if (!isSupabaseConfigured || dbStatus !== 'supabase_connected') {
+      alert("Operação não permitida: O Supabase não está conectado.")
+      return
+    }
 
-        if (existing) {
-          const { error } = await supabase
-            .from('poupancas')
-            .update({ valor: valorNum, motivo: motivoNome })
-            .eq('id', existing.id)
-          if (error) throw error
-          setPoupancas(prev => prev.map(p => p.id === existing.id ? { ...p, valor: valorNum, motivo: motivoNome } : p))
-        } else {
-          const { data, error } = await supabase
-            .from('poupancas')
-            .insert([{ motivo: motivoNome, valor: valorNum }])
-            .select()
-          if (error) throw error
-          if (data && data.length > 0) {
-            setPoupancas(prev => [...prev, data[0]])
-          } else {
-            loadData()
-          }
-        }
-        alert(`Motivo "${motivoNome}" salvo com sucesso!`)
-      } catch (err) {
-        console.warn("Erro ao salvar motivo de poupança no Supabase, salvando localmente:", err.message)
-        savePoupancaLocal(motivoNome, valorNum, editingPoupancaId)
-        alert(`Motivo "${motivoNome}" salvo localmente.`)
-      } finally {
-        setIsSyncing(false)
+    setIsSyncing(true)
+    try {
+      let existing = null
+      if (editingPoupancaId) {
+        existing = poupancas.find(p => p.id === editingPoupancaId)
+      } else {
+        existing = poupancas.find(p => p.motivo.toLowerCase() === motivoNome.toLowerCase())
       }
-    } else {
-      savePoupancaLocal(motivoNome, valorNum, editingPoupancaId)
-      alert(`Motivo "${motivoNome}" salvo localmente!`)
+
+      if (existing) {
+        const { error } = await supabase
+          .from('poupancas')
+          .update({ valor: valorNum, motivo: motivoNome })
+          .eq('id', existing.id)
+        if (error) throw error
+        setPoupancas(prev => prev.map(p => p.id === existing.id ? { ...p, valor: valorNum, motivo: motivoNome } : p))
+      } else {
+        const { data, error } = await supabase
+          .from('poupancas')
+          .insert([{ motivo: motivoNome, valor: valorNum }])
+          .select()
+        if (error) throw error
+        if (data && data.length > 0) {
+          setPoupancas(prev => [...prev, data[0]])
+        } else {
+          loadData()
+        }
+      }
+      alert(`Motivo "${motivoNome}" salvo com sucesso!`)
+    } catch (err) {
+      console.warn("Erro ao salvar motivo de poupança no Supabase:", err.message)
+      alert("Erro no Supabase: " + err.message)
+    } finally {
+      setIsSyncing(false)
     }
     setFormPoupancaMotivoNome('')
     setFormPoupancaMotivoValor('')
@@ -1116,51 +851,26 @@ export default function App() {
   const handleDeletePoupancaMotivo = async (p) => {
     if (!window.confirm(`Deseja realmente excluir a alocação para "${p.motivo}"?`)) return
 
-    if (isSupabaseConfigured && dbStatus === 'supabase_connected') {
-      setIsSyncing(true)
-      try {
-        const { error } = await supabase
-          .from('poupancas')
-          .delete()
-          .eq('id', p.id)
-        if (error) throw error
-        setPoupancas(prev => prev.filter(item => item.id !== p.id))
-        alert(`Alocação para "${p.motivo}" excluída com sucesso!`)
-      } catch (err) {
-        console.warn("Erro ao excluir do Supabase, excluindo localmente:", err.message)
-        deletePoupancaLocal(p.id)
-        alert(`Alocação para "${p.motivo}" excluída localmente.`)
-      } finally {
-        setIsSyncing(false)
-      }
-    } else {
-      deletePoupancaLocal(p.id)
-      alert(`Alocação para "${p.motivo}" excluída localmente!`)
-    }
-  }
-
-  const savePoupancaLocal = (motivo, valor, id = null) => {
-    let updated
-    let existing = null
-    if (id) {
-      existing = poupancas.find(p => p.id === id)
-    } else {
-      existing = poupancas.find(p => p.motivo.toLowerCase() === motivo.toLowerCase())
+    if (!isSupabaseConfigured || dbStatus !== 'supabase_connected') {
+      alert("Operação não permitida: O Supabase não está conectado.")
+      return
     }
 
-    if (existing) {
-      updated = poupancas.map(p => p.id === existing.id ? { ...p, valor, motivo } : p)
-    } else {
-      updated = [...poupancas, { id: 'poup-' + Date.now(), motivo, valor }]
+    setIsSyncing(true)
+    try {
+      const { error } = await supabase
+        .from('poupancas')
+        .delete()
+        .eq('id', p.id)
+      if (error) throw error
+      setPoupancas(prev => prev.filter(item => item.id !== p.id))
+      alert(`Alocação para "${p.motivo}" excluída com sucesso!`)
+    } catch (err) {
+      console.warn("Erro ao excluir do Supabase:", err.message)
+      alert("Erro ao excluir do Supabase: " + err.message)
+    } finally {
+      setIsSyncing(false)
     }
-    setPoupancas(updated)
-    localStorage.setItem('financas_poupanca', JSON.stringify(updated))
-  }
-
-  const deletePoupancaLocal = (id) => {
-    const updated = poupancas.filter(p => p.id !== id)
-    setPoupancas(updated)
-    localStorage.setItem('financas_poupanca', JSON.stringify(updated))
   }
 
   // --- Função para Adicionar Transferência entre Felipe e Thaís ---
@@ -1169,6 +879,11 @@ export default function App() {
     const valorNum = parseBRL(formTransferValor)
     if (isNaN(valorNum) || valorNum <= 0) {
       alert("Por favor, digite um valor válido maior que zero.")
+      return
+    }
+
+    if (!isSupabaseConfigured || dbStatus !== 'supabase_connected') {
+      alert("Operação não permitida: O Supabase não está conectado.")
       return
     }
 
@@ -1200,32 +915,26 @@ export default function App() {
 
     const txsToInsert = [txDe, txPara]
 
-    if (isSupabaseConfigured && dbStatus === 'supabase_connected') {
-      setIsSyncing(true)
-      try {
-        const { data, error } = await supabase
-          .from('transacoes')
-          .insert(txsToInsert)
-          .select()
+    setIsSyncing(true)
+    try {
+      const { data, error } = await supabase
+        .from('transacoes')
+        .insert(txsToInsert)
+        .select()
 
-        if (error) throw error
+      if (error) throw error
 
-        if (data && data.length > 0) {
-          setTransactions(prev => [...data, ...prev])
-        } else {
-          loadData()
-        }
-        alert(`Transferência de ${formatCurrency(valorNum)} realizada com sucesso!`)
-      } catch (err) {
-        console.error("Erro ao transferir no Supabase, gravando localmente:", err.message)
-        alert("Erro ao conectar com o Supabase. Transferência salva localmente no navegador.")
-        saveTxsLocal(txsToInsert)
-      } finally {
-        setIsSyncing(false)
+      if (data && data.length > 0) {
+        setTransactions(prev => [...data, ...prev])
+      } else {
+        loadData()
       }
-    } else {
-      saveTxsLocal(txsToInsert)
-      alert(`Transferência de ${formatCurrency(valorNum)} realizada localmente!`)
+      alert(`Transferência de ${formatCurrency(valorNum)} realizada com sucesso!`)
+    } catch (err) {
+      console.error("Erro ao transferir no Supabase:", err.message)
+      alert("Erro ao conectar com o Supabase: " + err.message)
+    } finally {
+      setIsSyncing(false)
     }
 
     // Resetar campos
