@@ -124,24 +124,26 @@ export default function App() {
   const [editCCStatus, setEditCCStatus] = useState('Pendente')
   const [editCCCategoria, setEditCCCategoria] = useState('Cartão de Crédito')
   const [editCCRecorrencia, setEditCCRecorrencia] = useState(1)
+  const [editCCQuemPagou, setEditCCQuemPagou] = useState('Felipe')
+  const [formCCQuemPagou, setFormCCQuemPagou] = useState('Felipe')
 
-  // Categorias válidas fornecidas pelo usuário
+  // Categorias válidas fornecidas pelo usuário (em ordem alfabética)
   const categoriasValidas = [
-    'Casa',
-    'Saúde',
-    'Dízimo',
-    'Transporte',
-    'Despesas Pessoais',
-    'Lazer',
-    'Investimentos',
     'Alimentação',
+    'Cartão de Crédito',
+    'Casa',
+    'Despesas Pessoais',
+    'Dízimo',
     'Educação',
     'Imprevistos',
-    'Salário',
+    'Investimentos',
+    'Lazer',
     'Renda Extra',
-    'Vale Alimentação/Refeição',
+    'Salário',
+    'Saúde',
     'Transferência',
-    'Cartão de Crédito'
+    'Transporte',
+    'Vale Alimentação/Refeição',
   ]
 
   useEffect(() => {
@@ -734,7 +736,7 @@ export default function App() {
         categoria: 'Cartão de Crédito',
         subcategoria: subcat,
         valor: valorNum,
-        quem_pagou: 'Felipe',
+        quem_pagou: formCCQuemPagou,
         status: 'Pendente'
       })
     }
@@ -758,6 +760,7 @@ export default function App() {
       setFormCCSubcategory('')
       setFormCCValor('')
       setFormCCRecorrencia(1)
+      setFormCCQuemPagou('Felipe')
 
     } catch (err) {
       console.error("Erro ao adicionar item no cartão:", err.message)
@@ -773,7 +776,8 @@ export default function App() {
     setEditCCValor(Number(item.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
     setEditCCStatus(item.status)
     setEditCCCategoria(item.categoria)
-    
+    setEditCCQuemPagou(item.quem_pagou === 'Thaís' || item.quem_pagou === 'Thais' ? 'Thaís' : 'Felipe')
+
     const match = item.subcategoria.match(/(.*?)\s*\((\d+)\/(\d+)\)/)
     if (match) {
       setEditCCSubcategory(match[1].trim())
@@ -851,7 +855,7 @@ export default function App() {
           categoria: editCCCategoria,
           subcategoria: subcat,
           valor: valorNum,
-          quem_pagou: 'Felipe',
+          quem_pagou: editCCQuemPagou,
           status: editCCStatus
         })
       }
@@ -862,7 +866,8 @@ export default function App() {
         subcategoria: finalSubcat,
         valor: valorNum,
         status: editCCStatus,
-        categoria: editCCCategoria
+        categoria: editCCCategoria,
+        quem_pagou: editCCQuemPagou
       }
 
       const { data: updateData, error: updateError } = await supabase
@@ -1398,31 +1403,23 @@ export default function App() {
 
   // Saldo em Carteira Individual
   const dinheiroEmContaFelipe = transactions
-    .filter(t => t.status === 'Pago' && t.categoria !== 'Vale Alimentação/Refeição')
+    .filter(t => t.status === 'Pago' && t.categoria !== 'Vale Alimentação/Refeição' && t.quem_pagou === 'Felipe')
     .reduce((sum, t) => {
-      const valorParaSomar = t.categoria === 'Cartão de Crédito' ? t.valor / 2 : t.valor;
-      if (t.quem_pagou === 'Felipe' || t.categoria === 'Cartão de Crédito') {
-        if (t.tipo === 'Receita') {
-          return sum + valorParaSomar;
-        } else {
-          return sum - valorParaSomar;
-        }
+      if (t.tipo === 'Receita') {
+        return sum + t.valor
+      } else {
+        return sum - t.valor
       }
-      return sum;
     }, 0)
 
   const dinheiroEmContaThais = transactions
-    .filter(t => t.status === 'Pago' && t.categoria !== 'Vale Alimentação/Refeição')
+    .filter(t => t.status === 'Pago' && t.categoria !== 'Vale Alimentação/Refeição' && (t.quem_pagou === 'Thaís' || t.quem_pagou === 'Thais'))
     .reduce((sum, t) => {
-      const valorParaSomar = t.categoria === 'Cartão de Crédito' ? t.valor / 2 : t.valor;
-      if (t.quem_pagou === 'Thaís' || t.quem_pagou === 'Thais' || t.categoria === 'Cartão de Crédito') {
-        if (t.tipo === 'Receita') {
-          return sum + valorParaSomar;
-        } else {
-          return sum - valorParaSomar;
-        }
+      if (t.tipo === 'Receita') {
+        return sum + t.valor
+      } else {
+        return sum - t.valor
       }
-      return sum;
     }, 0)
 
   const showSplitBar = dinheiroEmContaFelipe > 0 && dinheiroEmContaThais > 0
@@ -1765,7 +1762,8 @@ export default function App() {
           <div className="space-y-6 animate-slide-in">
 
             {/* Seletor de Mês de Referência */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-pink-50 dark:bg-slate-900/40 p-4 rounded-2xl border border-pink-200 dark:border-a              <div className="flex gap-2 w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-pink-50 dark:bg-slate-900/40 p-4 rounded-2xl border border-pink-200 dark:border-amber-500/20">
+              <div className="flex gap-2 w-full sm:w-auto">
                 <div className="relative flex-1 sm:flex-initial">
                   <button
                     type="button"
@@ -1838,17 +1836,9 @@ export default function App() {
                   <Calendar className="h-4 w-4 text-pink-600 dark:text-amber-400 font-semibold" />
                   Mês Atual
                 </button>
-              </div>alse)
-                            }}
-                            className="w-full text-left px-4 py-2 text-sm font-semibold text-pink-950 dark:text-slate-200 hover:bg-pink-200/40 dark:hover:bg-slate-800"
-                          >
-                            05/2026
-                          </button>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
+              </div>
+
+              <div className="flex gap-2 w-full sm:w-auto">
                 <button
                   onClick={() => {
                     setEditingTransactionId(null)
@@ -3319,11 +3309,10 @@ export default function App() {
                       type="button"
                       disabled={formCategoria === 'Cartão de Crédito'}
                       onClick={() => setIsFormQuemPagouDropdownOpen(!isFormQuemPagouDropdownOpen)}
-                      className={`flex items-center justify-between gap-2.5 w-full border rounded-xl py-2.5 px-3 text-sm font-semibold outline-none transition-all text-left ${
-                        formCategoria === 'Cartão de Crédito'
-                          ? 'bg-slate-100 dark:bg-slate-800/50 border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed'
-                          : 'bg-pink-50 dark:bg-slate-800 border-pink-200 dark:border-slate-700 text-pink-900 dark:text-slate-200 cursor-pointer focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20 hover:bg-pink-100/50 dark:hover:bg-slate-750'
-                      }`}
+                      className={`flex items-center justify-between gap-2.5 w-full border rounded-xl py-2.5 px-3 text-sm font-semibold outline-none transition-all text-left ${formCategoria === 'Cartão de Crédito'
+                        ? 'bg-slate-100 dark:bg-slate-800/50 border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                        : 'bg-pink-50 dark:bg-slate-800 border-pink-200 dark:border-slate-700 text-pink-900 dark:text-slate-200 cursor-pointer focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20 hover:bg-pink-100/50 dark:hover:bg-slate-750'
+                        }`}
                     >
                       <span>{formQuemPagou}</span>
                       {formCategoria !== 'Cartão de Crédito' && (
@@ -3429,15 +3418,13 @@ export default function App() {
                     type="button"
                     disabled={formCategoria === 'Cartão de Crédito' && !editingTransactionId}
                     onClick={() => setFormStatus('Pago')}
-                    className={`py-2 rounded-lg text-xs font-semibold transition-all ${
-                      formStatus === 'Pago'
-                        ? 'bg-pink-50 dark:bg-slate-700 text-pink-900 dark:text-white shadow-md'
-                        : 'text-pink-850 dark:text-slate-400 hover:text-pink-955'
-                    } ${
-                      formCategoria === 'Cartão de Crédito' && !editingTransactionId
+                    className={`py-2 rounded-lg text-xs font-semibold transition-all ${formStatus === 'Pago'
+                      ? 'bg-pink-50 dark:bg-slate-700 text-pink-900 dark:text-white shadow-md'
+                      : 'text-pink-850 dark:text-slate-400 hover:text-pink-955'
+                      } ${formCategoria === 'Cartão de Crédito' && !editingTransactionId
                         ? 'opacity-40 cursor-not-allowed'
                         : 'cursor-pointer'
-                    }`}
+                      }`}
                   >
                     Pago
                   </button>
@@ -3942,7 +3929,7 @@ export default function App() {
 
             {/* Conteúdo Principal (Scrollable) */}
             <div className="p-6 space-y-6 overflow-y-auto flex-1">
-              
+
               {/* Cards de Resumo */}
               {(() => {
                 const items = transactions.filter(t => t.categoria === 'Cartão de Crédito' && t.data_referencia.substring(0, 7) === ccModalMonth);
@@ -3992,7 +3979,7 @@ export default function App() {
               <div className="bg-white dark:bg-slate-800/40 p-4 rounded-2xl border border-pink-100 dark:border-slate-800">
                 <h4 className="text-xs font-extrabold text-slate-700 dark:text-slate-350 mb-3 uppercase tracking-wider">Adicionar Nova Compra</h4>
                 <form onSubmit={handleAddCCItem} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                  
+
                   {/* Data */}
                   <div className="md:col-span-2 space-y-1">
                     <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">Data</label>
@@ -4068,6 +4055,26 @@ export default function App() {
                     </select>
                   </div>
 
+                  {/* Quem Pagou */}
+                  <div className="md:col-span-2 space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">Quem Pagou</label>
+                    <div className="flex bg-pink-100/60 dark:bg-slate-800 p-0.5 rounded-xl border border-pink-200 dark:border-slate-700">
+                      {['Felipe', 'Thaís'].map(p => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setFormCCQuemPagou(p)}
+                          className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all ${formCCQuemPagou === p
+                              ? 'bg-white dark:bg-amber-500 text-pink-900 dark:text-slate-950 shadow-sm'
+                              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
+                            }`}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Status */}
                   <div className="md:col-span-2 space-y-1">
                     <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">Status</label>
@@ -4097,24 +4104,25 @@ export default function App() {
               {/* Tabela de Compras */}
               <div className="space-y-2">
                 <h4 className="text-xs font-extrabold text-slate-700 dark:text-slate-350 uppercase tracking-wider">Itens da Fatura</h4>
-                
+
                 <div className="overflow-x-auto rounded-xl border border-pink-200 dark:border-slate-800">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
                       <tr className="bg-pink-200/30 dark:bg-slate-900/60 text-pink-700 dark:text-amber-400 font-bold border-b border-pink-200 dark:border-slate-800">
-                        <th className="p-3 w-[10%]">Data</th>
-                        <th className="p-3 w-[28%]">Descrição</th>
-                        <th className="p-3 w-[16%]">Categoria</th>
-                        <th className="p-3 w-[13%]">Parcelas</th>
-                        <th className="p-3 w-[12%]">Valor</th>
-                        <th className="p-3 w-[11%]">Status</th>
+                        <th className="p-3 w-[9%]">Data</th>
+                        <th className="p-3 w-[25%]">Descrição</th>
+                        <th className="p-3 w-[13%]">Categoria</th>
+                        <th className="p-3 w-[9%]">Parcelas</th>
+                        <th className="p-3 w-[10%]">Valor</th>
+                        <th className="p-3 w-[9%]">Quem</th>
+                        <th className="p-3 w-[10%]">Status</th>
                         <th className="p-3 w-[10%] text-center">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-pink-200/50 dark:divide-slate-800/40">
                       {(() => {
                         const items = transactions.filter(t => t.categoria === 'Cartão de Crédito' && t.data_referencia.substring(0, 7) === ccModalMonth);
-                        
+
                         if (items.length === 0) {
                           return (
                             <tr>
@@ -4144,7 +4152,7 @@ export default function App() {
                                     className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-lg py-1 px-2 text-[11px] text-pink-900 dark:text-slate-200 outline-none"
                                   />
                                 </td>
-                                
+
                                 {/* Edit Description */}
                                 <td className="p-2">
                                   <input
@@ -4211,6 +4219,18 @@ export default function App() {
                                   />
                                 </td>
 
+                                {/* Edit Quem Pagou */}
+                                <td className="p-2">
+                                  <select
+                                    value={editCCQuemPagou}
+                                    onChange={(e) => setEditCCQuemPagou(e.target.value)}
+                                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-lg py-1 px-2 text-[11px] text-pink-900 dark:text-slate-200 font-bold outline-none cursor-pointer"
+                                  >
+                                    <option value="Felipe">Felipe</option>
+                                    <option value="Thaís">Thaís</option>
+                                  </select>
+                                </td>
+
                                 {/* Edit Status */}
                                 <td className="p-2">
                                   <select
@@ -4269,11 +4289,10 @@ export default function App() {
                               <td className="p-3 whitespace-nowrap">
                                 <span
                                   onClick={() => toggleCCItemStatus(item)}
-                                  className={`inline-flex items-center gap-1 py-0.5 px-2 rounded-full font-bold text-[10px] cursor-pointer hover:opacity-85 select-none transition-all active:scale-95 ${
-                                    item.status === 'Pago'
-                                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/35 dark:text-emerald-400'
-                                      : 'bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-400'
-                                  }`}
+                                  className={`inline-flex items-center gap-1 py-0.5 px-2 rounded-full font-bold text-[10px] cursor-pointer hover:opacity-85 select-none transition-all active:scale-95 ${item.status === 'Pago'
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/35 dark:text-emerald-400'
+                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-400'
+                                    }`}
                                   title="Clique para alternar status"
                                 >
                                   {item.status === 'Pago' ? (
