@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Sun,
   Moon,
@@ -19,7 +19,8 @@ import {
   Info,
   ChevronDown,
   CreditCard,
-  ArrowLeftRight
+  ArrowLeftRight,
+  X
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -105,6 +106,25 @@ export default function App() {
     return `${yyyy}-${mm}-${dd}`
   })
 
+  // --- Estados do Cartão de Crédito ---
+  const [isCCModalOpen, setIsCCModalOpen] = useState(false)
+  const [ccModalMonth, setCcModalMonth] = useState('')
+  const [editingCCItemId, setEditingCCItemId] = useState(null)
+  const [formCCDate, setFormCCDate] = useState(() => {
+    const today = new Date()
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  })
+  const [formCCSubcategory, setFormCCSubcategory] = useState('')
+  const [formCCValor, setFormCCValor] = useState('')
+  const [formCCRecorrencia, setFormCCRecorrencia] = useState(1)
+
+  const [editCCDate, setEditCCDate] = useState('')
+  const [editCCSubcategory, setEditCCSubcategory] = useState('')
+  const [editCCValor, setEditCCValor] = useState('')
+  const [editCCStatus, setEditCCStatus] = useState('Pendente')
+  const [editCCCategoria, setEditCCCategoria] = useState('Cartão de Crédito')
+  const [editCCRecorrencia, setEditCCRecorrencia] = useState(1)
+
   // Categorias válidas fornecidas pelo usuário
   const categoriasValidas = [
     'Casa',
@@ -120,10 +140,10 @@ export default function App() {
     'Salário',
     'Renda Extra',
     'Vale Alimentação/Refeição',
-    'Transferência'
+    'Transferência',
+    'Cartão de Crédito'
   ]
 
-  // --- Efeito para Carregar Dados e Aplicar Tema ---
   useEffect(() => {
     // Aplicar tema no elemento root HTML
     const root = window.document.documentElement
@@ -136,6 +156,7 @@ export default function App() {
 
   useEffect(() => {
     loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Função para verificar virada de mês e redefinir status de contas recorrentes pagas para pendente.
@@ -245,7 +266,7 @@ export default function App() {
     checkMonthTurn(txsWithRecharge, false)
   }
 
-  const loadData = async () => {
+  async function loadData() {
     if (isSupabaseConfigured) {
       setIsSyncing(true)
       try {
@@ -308,8 +329,13 @@ export default function App() {
     setFormTipo(tx.tipo)
     setFormCategoria(tx.categoria)
     setFormSubcategoria(tx.subcategoria)
-    setFormQuemPagou(tx.quem_pagou)
-    setFormStatus(tx.status)
+    if (tx.categoria === 'Cartão de Crédito') {
+      setFormQuemPagou('Felipe / Thaís')
+      setFormStatus('Pendente')
+    } else {
+      setFormQuemPagou(tx.quem_pagou)
+      setFormStatus(tx.status)
+    }
 
     const today = new Date()
     const yyyy = today.getFullYear()
@@ -358,16 +384,7 @@ export default function App() {
     }
 
     const subcategoriaCapitalized = capitalizeWords(formSubcategoria.trim()) || 'Outros'
-
-    const txData = {
-      data_referencia: formDataReferencia,
-      tipo: formTipo,
-      categoria: formCategoria,
-      subcategoria: subcategoriaCapitalized,
-      valor: valorNum,
-      quem_pagou: formQuemPagou,
-      status: formStatus
-    }
+    const dbQuemPagou = formCategoria === 'Cartão de Crédito' ? 'Felipe' : formQuemPagou
 
     if (editingTransactionId) {
       // Modo Edição com suporte a recorrência
@@ -382,7 +399,7 @@ export default function App() {
         categoria: formCategoria,
         subcategoria: firstSubcat,
         valor: valorNum,
-        quem_pagou: formQuemPagou,
+        quem_pagou: dbQuemPagou,
         status: formStatus
       }
 
@@ -397,7 +414,7 @@ export default function App() {
           categoria: formCategoria,
           subcategoria: subcat,
           valor: valorNum,
-          quem_pagou: formQuemPagou,
+          quem_pagou: dbQuemPagou,
           status: formStatus
         })
       }
@@ -506,8 +523,8 @@ export default function App() {
           categoria: formCategoria,
           subcategoria: subcat,
           valor: valorNum,
-          quem_pagou: formQuemPagou,
-          status: formStatus
+          quem_pagou: dbQuemPagou,
+          status: formCategoria === 'Cartão de Crédito' ? 'Pendente' : formStatus
         })
       }
 
@@ -604,6 +621,322 @@ export default function App() {
     } finally {
       setIsSyncing(false)
     }
+  }
+
+  const handleOpenCCModal = (month) => {
+    setCcModalMonth(month)
+    const today = new Date()
+    const todayMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+    if (todayMonthStr === month) {
+      setFormCCDate(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`)
+    } else {
+      setFormCCDate(`${month}-01`)
+    }
+    setFormCCSubcategory('')
+    setFormCCValor('')
+    setFormCCRecorrencia(1)
+
+    setEditingCCItemId(null)
+    setIsCCModalOpen(true)
+  }
+
+  const handleToggleCCGroupStatus = async (month, currentStatus) => {
+    if (!isSupabaseConfigured || dbStatus !== 'supabase_connected') {
+      alert("Operação não permitida: O Supabase não está conectado.")
+      return
+    }
+    const newStatus = currentStatus === 'Pago' ? 'Pendente' : 'Pago'
+    const cardItems = transactions.filter(t => t.categoria === 'Cartão de Crédito' && t.data_referencia.substring(0, 7) === month)
+    if (cardItems.length === 0) return
+
+    const ids = cardItems.map(item => item.id)
+    setIsSyncing(true)
+    try {
+      const { error } = await supabase
+        .from('transacoes')
+        .update({ status: newStatus })
+        .in('id', ids)
+
+      if (error) throw error
+
+      setTransactions(prev => prev.map(t => ids.includes(t.id) ? { ...t, status: newStatus } : t))
+    } catch (err) {
+      console.error("Erro ao alternar status do cartão:", err.message)
+      alert("Erro: " + err.message)
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
+  const handleDeleteCCGroup = async (month) => {
+    const cardItems = transactions.filter(t => t.categoria === 'Cartão de Crédito' && t.data_referencia.substring(0, 7) === month)
+    if (cardItems.length === 0) return
+
+    if (!window.confirm(`Deseja realmente excluir a fatura do cartão inteira (${cardItems.length} compras)?`)) return
+
+    if (!isSupabaseConfigured || dbStatus !== 'supabase_connected') {
+      alert("Operação não permitida: O Supabase não está conectado.")
+      return
+    }
+
+    const ids = cardItems.map(item => item.id)
+    setIsSyncing(true)
+    try {
+      const { error } = await supabase
+        .from('transacoes')
+        .delete()
+        .in('id', ids)
+
+      if (error) throw error
+
+      setTransactions(prev => prev.filter(t => !ids.includes(t.id)))
+    } catch (err) {
+      console.error("Erro ao excluir compras do cartão:", err.message)
+      alert("Erro: " + err.message)
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
+  const handleAddCCItem = async (e) => {
+    e.preventDefault()
+    const valorNum = parseBRL(formCCValor)
+    if (isNaN(valorNum) || valorNum <= 0) {
+      alert("Por favor, digite um valor válido maior que zero.")
+      return
+    }
+
+    if (formCCDate.substring(0, 7) !== ccModalMonth) {
+      alert(`A data selecionada deve pertencer ao mês da fatura (${formatCCModalMonthName(ccModalMonth)}).`)
+      return
+    }
+
+    const subcategoriaCapitalized = capitalizeWords(formCCSubcategory.trim()) || 'Compra Cartão'
+
+    if (!isSupabaseConfigured || dbStatus !== 'supabase_connected') {
+      alert("Operação não permitida: O Supabase não está conectado.")
+      return
+    }
+
+    const numRecorrencias = parseInt(formCCRecorrencia, 10) || 1
+    const txsToInsert = []
+
+    for (let i = 0; i < numRecorrencias; i++) {
+      const dateRef = addMonths(formCCDate, i)
+      const subcat = numRecorrencias > 1
+        ? `${subcategoriaCapitalized} (${i + 1}/${numRecorrencias})`
+        : subcategoriaCapitalized
+
+      txsToInsert.push({
+        criado_em: new Date().toISOString(),
+        data_referencia: dateRef,
+        tipo: 'Despesa',
+        categoria: 'Cartão de Crédito',
+        subcategoria: subcat,
+        valor: valorNum,
+        quem_pagou: 'Felipe',
+        status: 'Pendente'
+      })
+    }
+
+    setIsSyncing(true)
+    try {
+      const { data, error } = await supabase
+        .from('transacoes')
+        .insert(txsToInsert)
+        .select()
+
+      if (error) throw error
+
+      if (data && data.length > 0) {
+        setTransactions(prev => [...data, ...prev])
+      } else {
+        loadData()
+      }
+
+      // Reset form fields
+      setFormCCSubcategory('')
+      setFormCCValor('')
+      setFormCCRecorrencia(1)
+
+    } catch (err) {
+      console.error("Erro ao adicionar item no cartão:", err.message)
+      alert("Erro ao salvar no Supabase: " + err.message)
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
+  const startEditCCItem = (item) => {
+    setEditingCCItemId(item.id)
+    setEditCCDate(item.data_referencia)
+    setEditCCValor(Number(item.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+    setEditCCStatus(item.status)
+    setEditCCCategoria(item.categoria)
+    
+    const match = item.subcategoria.match(/(.*?)\s*\((\d+)\/(\d+)\)/)
+    if (match) {
+      setEditCCSubcategory(match[1].trim())
+      setEditCCRecorrencia(parseInt(match[3], 10))
+    } else {
+      setEditCCSubcategory(item.subcategoria)
+      setEditCCRecorrencia(1)
+    }
+  }
+
+  const handleSaveCCItemEdit = async (id) => {
+    const item = transactions.find(t => t.id === id)
+    if (!item) return
+
+    const valorNum = parseBRL(editCCValor)
+    if (isNaN(valorNum) || valorNum <= 0) {
+      alert("Por favor, digite um valor válido maior que zero.")
+      return
+    }
+
+    if (editCCCategoria === 'Cartão de Crédito' && editCCDate.substring(0, 7) !== ccModalMonth) {
+      alert(`A data selecionada deve pertencer ao mês da fatura (${formatCCModalMonthName(ccModalMonth)}).`)
+      return
+    }
+
+    const subcategoriaCapitalized = capitalizeWords(editCCSubcategory.trim()) || 'Compra Cartão'
+
+    if (!isSupabaseConfigured || dbStatus !== 'supabase_connected') {
+      alert("Operação não permitida: O Supabase não está conectado.")
+      return
+    }
+
+    setIsSyncing(true)
+    try {
+      // 1. Verificar se a transação tinha recorrência original e limpar futuras parcelas órfãs
+      const originalMatch = item.subcategoria.match(/(.*?)\s*\((\d+)\/(\d+)\)/)
+      let deletedSiblingIds = []
+
+      if (originalMatch) {
+        const cleanOrig = originalMatch[1].trim()
+        const pattern = new RegExp("^" + escapeRegExp(cleanOrig) + "\\s*\\(\\d+/\\d+\\)$")
+
+        const siblingTxs = transactions.filter(t =>
+          t.categoria === 'Cartão de Crédito' &&
+          t.id !== id &&
+          t.data_referencia >= item.data_referencia &&
+          pattern.test(t.subcategoria)
+        )
+
+        if (siblingTxs.length > 0) {
+          deletedSiblingIds = siblingTxs.map(t => t.id)
+          const { error: deleteError } = await supabase
+            .from('transacoes')
+            .delete()
+            .in('id', deletedSiblingIds)
+
+          if (deleteError) throw deleteError
+        }
+      }
+
+      // 2. Gerar as novas futuras parcelas se editCCRecorrencia > 1
+      const editCCRecorrenciaNum = parseInt(editCCRecorrencia, 10) || 1
+      const finalSubcat = editCCRecorrenciaNum > 1
+        ? `${subcategoriaCapitalized} (1/${editCCRecorrenciaNum})`
+        : subcategoriaCapitalized
+
+      const extraTxsToInsert = []
+      for (let i = 1; i < editCCRecorrenciaNum; i++) {
+        const dateRef = addMonths(editCCDate, i)
+        const subcat = `${subcategoriaCapitalized} (${i + 1}/${editCCRecorrenciaNum})`
+        extraTxsToInsert.push({
+          criado_em: new Date().toISOString(),
+          data_referencia: dateRef,
+          tipo: 'Despesa',
+          categoria: editCCCategoria,
+          subcategoria: subcat,
+          valor: valorNum,
+          quem_pagou: 'Felipe',
+          status: editCCStatus
+        })
+      }
+
+      // 3. Atualizar a transação principal
+      const updatedFields = {
+        data_referencia: editCCDate,
+        subcategoria: finalSubcat,
+        valor: valorNum,
+        status: editCCStatus,
+        categoria: editCCCategoria
+      }
+
+      const { data: updateData, error: updateError } = await supabase
+        .from('transacoes')
+        .update(updatedFields)
+        .eq('id', id)
+        .select()
+
+      if (updateError) throw updateError
+
+      let insertedData = []
+      if (extraTxsToInsert.length > 0) {
+        const { data: insData, error: insError } = await supabase
+          .from('transacoes')
+          .insert(extraTxsToInsert)
+          .select()
+        if (insError) throw insError
+        insertedData = insData || []
+      }
+
+      if (updateData && updateData.length > 0) {
+        setTransactions(prev => {
+          let filtered = prev.filter(t => !deletedSiblingIds.includes(t.id))
+          filtered = filtered.map(t => t.id === id ? updateData[0] : t)
+          return [...insertedData, ...filtered]
+        })
+      } else {
+        loadData()
+      }
+
+      setEditingCCItemId(null)
+    } catch (err) {
+      console.error("Erro ao editar item no cartão:", err.message)
+      alert("Erro ao salvar no Supabase: " + err.message)
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
+  const toggleCCItemStatus = async (item) => {
+    if (!isSupabaseConfigured || dbStatus !== 'supabase_connected') {
+      alert("Operação não permitida: O Supabase não está conectado.")
+      return
+    }
+    const newStatus = item.status === 'Pago' ? 'Pendente' : 'Pago'
+    setIsSyncing(true)
+    try {
+      const { error } = await supabase
+        .from('transacoes')
+        .update({ status: newStatus })
+        .eq('id', item.id)
+
+      if (error) throw error
+
+      setTransactions(prev => prev.map(t => t.id === item.id ? { ...t, status: newStatus } : t))
+    } catch (err) {
+      console.error("Erro ao alternar status do item de cartão:", err.message)
+      alert("Erro ao atualizar status: " + err.message)
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
+  const formatCCModalMonthName = (monthStr) => {
+    if (!monthStr) return ''
+    const parts = monthStr.split('-')
+    if (parts.length < 2) return monthStr
+    const [year, month] = parts
+    const months = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ]
+    const idx = parseInt(month, 10) - 1
+    return idx >= 0 && idx < 12 ? `${months[idx]} de ${year}` : monthStr
   }
 
   // --- Função para Alternar Status da Transação (Pago/Pendente) ---
@@ -902,12 +1235,28 @@ export default function App() {
     .reduce((sum, t) => sum + t.valor, 0)
 
   const despesasFelipe = activeMonthCashTransactions
-    .filter(t => t.tipo === 'Despesa' && t.quem_pagou === 'Felipe')
-    .reduce((sum, t) => sum + t.valor, 0)
+    .filter(t => t.tipo === 'Despesa')
+    .reduce((sum, t) => {
+      if (t.categoria === 'Cartão de Crédito') {
+        return sum + (t.valor / 2)
+      }
+      if (t.quem_pagou === 'Felipe') {
+        return sum + t.valor
+      }
+      return sum
+    }, 0)
 
   const despesasThais = activeMonthCashTransactions
-    .filter(t => t.tipo === 'Despesa' && (t.quem_pagou === 'Thaís' || t.quem_pagou === 'Thais'))
-    .reduce((sum, t) => sum + t.valor, 0)
+    .filter(t => t.tipo === 'Despesa')
+    .reduce((sum, t) => {
+      if (t.categoria === 'Cartão de Crédito') {
+        return sum + (t.valor / 2)
+      }
+      if (t.quem_pagou === 'Thaís' || t.quem_pagou === 'Thais') {
+        return sum + t.valor
+      }
+      return sum
+    }, 0)
 
   const totalDespesasProporcao = despesasFelipe + despesasThais
   const pctDespesaFelipe = totalDespesasProporcao > 0 ? (despesasFelipe / totalDespesasProporcao) * 100 : 50
@@ -1049,23 +1398,31 @@ export default function App() {
 
   // Saldo em Carteira Individual
   const dinheiroEmContaFelipe = transactions
-    .filter(t => t.status === 'Pago' && t.categoria !== 'Vale Alimentação/Refeição' && t.quem_pagou === 'Felipe')
+    .filter(t => t.status === 'Pago' && t.categoria !== 'Vale Alimentação/Refeição')
     .reduce((sum, t) => {
-      if (t.tipo === 'Receita') {
-        return sum + t.valor
-      } else {
-        return sum - t.valor
+      const valorParaSomar = t.categoria === 'Cartão de Crédito' ? t.valor / 2 : t.valor;
+      if (t.quem_pagou === 'Felipe' || t.categoria === 'Cartão de Crédito') {
+        if (t.tipo === 'Receita') {
+          return sum + valorParaSomar;
+        } else {
+          return sum - valorParaSomar;
+        }
       }
+      return sum;
     }, 0)
 
   const dinheiroEmContaThais = transactions
-    .filter(t => t.status === 'Pago' && t.categoria !== 'Vale Alimentação/Refeição' && (t.quem_pagou === 'Thaís' || t.quem_pagou === 'Thais'))
+    .filter(t => t.status === 'Pago' && t.categoria !== 'Vale Alimentação/Refeição')
     .reduce((sum, t) => {
-      if (t.tipo === 'Receita') {
-        return sum + t.valor
-      } else {
-        return sum - t.valor
+      const valorParaSomar = t.categoria === 'Cartão de Crédito' ? t.valor / 2 : t.valor;
+      if (t.quem_pagou === 'Thaís' || t.quem_pagou === 'Thais' || t.categoria === 'Cartão de Crédito') {
+        if (t.tipo === 'Receita') {
+          return sum + valorParaSomar;
+        } else {
+          return sum - valorParaSomar;
+        }
       }
+      return sum;
     }, 0)
 
   const showSplitBar = dinheiroEmContaFelipe > 0 && dinheiroEmContaThais > 0
@@ -1121,22 +1478,35 @@ export default function App() {
     return dateStr;
   }
 
-  // Determinar a cor da barra de progresso (Sunset/Warm: Rosas e Amarelos)
-  const getProgressBarColor = (percentage) => {
-    if (percentage < 70) return 'bg-pink-400'
-    if (percentage < 100) return 'bg-amber-500'
-    return 'bg-rose-600 animate-pulse'
-  };
+  // --- Filtragem de Transações para a Tabela com Cartão de Crédito Consolidado ---
+  const activeMonthNonCCTxs = activeMonthTransactions.filter(t => t.categoria !== 'Cartão de Crédito')
+  const ccTxs = activeMonthTransactions.filter(t => t.categoria === 'Cartão de Crédito')
 
-  const getProgressBgColor = (percentage) => {
-    if (percentage < 70) return 'bg-pink-50/60 dark:bg-pink-950/20'
-    if (percentage < 100) return 'bg-amber-50/60 dark:bg-amber-950/20'
-    return 'bg-rose-100/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/30'
-  };
+  const groupedCCTx = (() => {
+    if (ccTxs.length === 0) return null
+    const totalValor = ccTxs.reduce((sum, t) => sum + t.valor, 0)
+    const allPago = ccTxs.every(t => t.status === 'Pago')
+    const createdDate = ccTxs.length > 0 ? ccTxs[ccTxs.length - 1].criado_em : `${selectedMonth}-01T00:00:00Z`
+    return {
+      id: `cc-${selectedMonth}`,
+      criado_em: createdDate,
+      data_referencia: `${selectedMonth}-01`,
+      tipo: 'Despesa',
+      categoria: 'Cartão de Crédito',
+      subcategoria: `Fatura Consolidada (${ccTxs.length} ${ccTxs.length === 1 ? 'item' : 'itens'})`,
+      valor: totalValor,
+      quem_pagou: 'Felipe / Thaís',
+      status: allPago ? 'Pago' : 'Pendente',
+      isGroupedCC: true
+    }
+  })()
 
-  // --- Filtragem de Transações para a Tabela ---
-  const filteredTransactions = activeMonthTransactions.filter(t => {
-    const matchPerson = filterPerson === 'Todos' || t.quem_pagou === filterPerson
+  const activeMonthTransactionsWithGroupedCC = groupedCCTx
+    ? [groupedCCTx, ...activeMonthNonCCTxs]
+    : activeMonthNonCCTxs
+
+  const filteredTransactions = activeMonthTransactionsWithGroupedCC.filter(t => {
+    const matchPerson = filterPerson === 'Todos' || t.quem_pagou === filterPerson || (t.categoria === 'Cartão de Crédito' && (filterPerson === 'Felipe' || filterPerson === 'Thaís'))
     const matchType = filterType === 'Todos' || t.tipo === filterType
     const matchStatus = filterStatus === 'Todos' || t.status === filterStatus
     const matchCategory = filterCategory === 'Todas' || t.categoria === filterCategory
@@ -1238,6 +1608,10 @@ export default function App() {
       .join(' ')
   }
 
+  const escapeRegExp = (string) => {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  }
+
   // Função para converter strings formatadas em pt-BR (ex: "1.234,56" ou "1234,56") para número (float)
   const parseBRL = (valueString) => {
     if (valueString === null || valueString === undefined) return 0;
@@ -1271,8 +1645,9 @@ export default function App() {
       case 'Imprevistos': return '⚠️';
       case 'Salário': return '💵';
       case 'Renda Extra': return '💸';
-      case 'Vale Alimentação/Refeição': return '💳';
+      case 'Vale Alimentação/Refeição': return '🍔';
       case 'Transferência': return '🔄';
+      case 'Cartão de Crédito': return '💳';
       default: return '💰';
     }
   }
@@ -1390,15 +1765,7 @@ export default function App() {
           <div className="space-y-6 animate-slide-in">
 
             {/* Seletor de Mês de Referência */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-pink-50 dark:bg-slate-900/40 p-4 rounded-2xl border border-pink-200 dark:border-amber-500/20">
-              <div>
-                <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-pink-600 dark:text-amber-400" />
-                  Mês de Referência
-                </h2>
-                <p className="text-xs text-slate-500">Exibindo estatísticas e lançamentos para o mês escolhido</p>
-              </div>
-              <div className="flex gap-2 w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-pink-50 dark:bg-slate-900/40 p-4 rounded-2xl border border-pink-200 dark:border-a              <div className="flex gap-2 w-full sm:w-auto">
                 <div className="relative flex-1 sm:flex-initial">
                   <button
                     type="button"
@@ -1451,6 +1818,27 @@ export default function App() {
                             onClick={() => {
                               setSelectedMonth('2026-05')
                               setIsMonthDropdownOpen(false)
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm font-semibold text-pink-955 dark:text-slate-200 hover:bg-pink-200/40 dark:hover:bg-slate-800"
+                          >
+                            05/2026
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedMonth(getTodayMonthStr())}
+                  title="Ir para o mês atual"
+                  className="px-3.5 bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-amber-500/20 rounded-xl font-bold text-pink-900 dark:text-slate-200 hover:bg-pink-100/50 dark:hover:bg-slate-750 transition-all active:scale-95 cursor-pointer text-xs flex items-center gap-1.5 whitespace-nowrap"
+                >
+                  <Calendar className="h-4 w-4 text-pink-600 dark:text-amber-400 font-semibold" />
+                  Mês Atual
+                </button>
+              </div>alse)
                             }}
                             className="w-full text-left px-4 py-2 text-sm font-semibold text-pink-950 dark:text-slate-200 hover:bg-pink-200/40 dark:hover:bg-slate-800"
                           >
@@ -2349,13 +2737,21 @@ export default function App() {
                             </div>
                           </td>
                           <td className="p-4">
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${tx.quem_pagou === 'Felipe'
-                              ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
-                              : 'bg-pink-50 text-pink-700 dark:bg-pink-950/40 dark:text-pink-300'
-                              }`}>
-                              <span className={`h-1.5 w-1.5 rounded-full ${tx.quem_pagou === 'Felipe' ? 'bg-amber-500' : 'bg-pink-500'}`}></span>
-                              {tx.quem_pagou}
-                            </span>
+                            {tx.categoria === 'Cartão de Crédito' ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-amber-100 to-pink-100 text-slate-800 dark:from-amber-950/40 dark:to-pink-950/40 dark:text-slate-200">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+                                <span className="h-1.5 w-1.5 rounded-full bg-pink-500 -ml-1"></span>
+                                Felipe / Thaís
+                              </span>
+                            ) : (
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${tx.quem_pagou === 'Felipe'
+                                ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                                : 'bg-pink-50 text-pink-700 dark:bg-pink-950/40 dark:text-pink-300'
+                                }`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${tx.quem_pagou === 'Felipe' ? 'bg-amber-500' : 'bg-pink-500'}`}></span>
+                                {tx.quem_pagou}
+                              </span>
+                            )}
                           </td>
                           <td className={`p-4 font-bold whitespace-nowrap ${tx.tipo === 'Receita'
                             ? 'text-emerald-600 dark:text-emerald-400'
@@ -2367,7 +2763,13 @@ export default function App() {
                             <div className="flex items-center gap-2">
                               <button
                                 type="button"
-                                onClick={() => toggleTransactionStatus(tx)}
+                                onClick={() => {
+                                  if (tx.categoria === 'Cartão de Crédito') {
+                                    handleToggleCCGroupStatus(selectedMonth, tx.status)
+                                  } else {
+                                    toggleTransactionStatus(tx)
+                                  }
+                                }}
                                 className={`p-1.5 rounded-lg transition-all active:scale-95 cursor-pointer hover:bg-pink-100/60 dark:hover:bg-slate-800 ${tx.status === 'Pago'
                                   ? 'text-emerald-600 dark:text-emerald-400'
                                   : 'text-rose-600 dark:text-rose-400'
@@ -2394,27 +2796,49 @@ export default function App() {
                           </td>
                           <td className="p-4 text-center">
                             <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                onClick={() => startEditTransaction(tx)}
-                                className="p-1.5 text-slate-400 hover:text-pink-650 dark:hover:text-amber-400 rounded-lg hover:bg-pink-100/60 dark:hover:bg-slate-800 transition-all active:scale-90"
-                                title="Editar Lançamento"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => startDuplicateTransaction(tx)}
-                                className="p-1.5 text-slate-400 hover:text-pink-650 dark:hover:text-amber-400 rounded-lg hover:bg-pink-100/60 dark:hover:bg-slate-800 transition-all active:scale-90"
-                                title="Copiar Lançamento"
-                              >
-                                <Copy className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteTransaction(tx.id)}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all active:scale-90"
-                                title="Excluir Lançamento"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+                              {tx.categoria === 'Cartão de Crédito' ? (
+                                <>
+                                  <button
+                                    onClick={() => handleOpenCCModal(selectedMonth)}
+                                    className="p-1.5 text-pink-650 hover:text-pink-850 dark:text-amber-400 dark:hover:text-amber-500 rounded-lg hover:bg-pink-100/60 dark:hover:bg-slate-800 transition-all font-bold text-xs flex items-center gap-1 cursor-pointer active:scale-90"
+                                    title="Visualizar Detalhes do Cartão"
+                                  >
+                                    <Info className="h-4 w-4" />
+                                    <span>Ver Itens</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteCCGroup(selectedMonth)}
+                                    className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all active:scale-90 cursor-pointer"
+                                    title="Excluir Fatura Completa"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => startEditTransaction(tx)}
+                                    className="p-1.5 text-slate-400 hover:text-pink-650 dark:hover:text-amber-400 rounded-lg hover:bg-pink-100/60 dark:hover:bg-slate-800 transition-all active:scale-90"
+                                    title="Editar Lançamento"
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => startDuplicateTransaction(tx)}
+                                    className="p-1.5 text-slate-400 hover:text-pink-650 dark:hover:text-amber-400 rounded-lg hover:bg-pink-100/60 dark:hover:bg-slate-800 transition-all active:scale-90"
+                                    title="Copiar Lançamento"
+                                  >
+                                    <Copy className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteTransaction(tx.id)}
+                                    className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all active:scale-90"
+                                    title="Excluir Lançamento"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -2471,6 +2895,14 @@ export default function App() {
                       <option key={m} value={m}>{m.split('-')[1]}/{m.split('-')[0]}</option>
                     ))}
                   </select>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMonth(getTodayMonthStr())}
+                    title="Ir para o mês atual"
+                    className="flex items-center justify-center py-1.5 px-3 bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-amber-500/20 rounded-xl font-bold text-pink-900 dark:text-slate-200 hover:bg-pink-100/50 dark:hover:bg-slate-750 transition-all active:scale-95 cursor-pointer text-xs gap-1"
+                  >
+                    Mês Atual
+                  </button>
                 </div>
 
                 {/* Filtro de pessoas & tipos */}
@@ -2615,12 +3047,21 @@ export default function App() {
                           </td>
                           <td className="p-4 text-slate-500 dark:text-slate-400 max-w-[200px] truncate" title={tx.subcategoria}>{tx.subcategoria}</td>
                           <td className="p-4">
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${tx.quem_pagou === 'Felipe'
-                              ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
-                              : 'bg-pink-50 text-pink-700 dark:bg-pink-950/40 dark:text-pink-300'
-                              }`}>
-                              {tx.quem_pagou}
-                            </span>
+                            {tx.categoria === 'Cartão de Crédito' ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-amber-100 to-pink-100 text-slate-800 dark:from-amber-950/40 dark:to-pink-950/40 dark:text-slate-200">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+                                <span className="h-1.5 w-1.5 rounded-full bg-pink-500 -ml-1"></span>
+                                Felipe / Thaís
+                              </span>
+                            ) : (
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${tx.quem_pagou === 'Felipe'
+                                ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                                : 'bg-pink-50 text-pink-700 dark:bg-pink-950/40 dark:text-pink-300'
+                                }`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${tx.quem_pagou === 'Felipe' ? 'bg-amber-500' : 'bg-pink-500'}`}></span>
+                                {tx.quem_pagou}
+                              </span>
+                            )}
                           </td>
                           <td className={`p-4 font-bold ${tx.tipo === 'Receita'
                             ? 'text-emerald-600 dark:text-emerald-400'
@@ -2632,7 +3073,13 @@ export default function App() {
                             <div className="flex items-center gap-2">
                               <button
                                 type="button"
-                                onClick={() => toggleTransactionStatus(tx)}
+                                onClick={() => {
+                                  if (tx.categoria === 'Cartão de Crédito') {
+                                    handleToggleCCGroupStatus(tx.data_referencia.substring(0, 7), tx.status)
+                                  } else {
+                                    toggleTransactionStatus(tx)
+                                  }
+                                }}
                                 className={`p-1.5 rounded-lg transition-all active:scale-95 cursor-pointer hover:bg-pink-100/60 dark:hover:bg-slate-800 ${tx.status === 'Pago'
                                   ? 'text-emerald-600 dark:text-emerald-400'
                                   : 'text-rose-600 dark:text-rose-400'
@@ -2642,7 +3089,7 @@ export default function App() {
                                 <RefreshCw className="h-3.5 w-3.5 transition-transform hover:rotate-180 duration-500" />
                               </button>
                               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold ${tx.status === 'Pago'
-                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-450'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400'
                                 : 'bg-rose-100 text-rose-800 dark:bg-rose-950/35 dark:text-rose-450'
                                 }`}>
                                 {tx.status === 'Pago' ? 'Pago' : 'Pendente'}
@@ -2651,27 +3098,49 @@ export default function App() {
                           </td>
                           <td className="p-4 text-center">
                             <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                onClick={() => startEditTransaction(tx)}
-                                className="p-1.5 text-slate-400 hover:text-pink-600 dark:hover:text-amber-400 rounded-lg transition-all"
-                                title="Editar Lançamento"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => startDuplicateTransaction(tx)}
-                                className="p-1.5 text-slate-400 hover:text-pink-600 dark:hover:text-amber-400 rounded-lg transition-all"
-                                title="Copiar Lançamento"
-                              >
-                                <Copy className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteTransaction(tx.id)}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-455 rounded-lg transition-all"
-                                title="Excluir Lançamento"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+                              {tx.categoria === 'Cartão de Crédito' ? (
+                                <>
+                                  <button
+                                    onClick={() => handleOpenCCModal(tx.data_referencia.substring(0, 7))}
+                                    className="p-1.5 text-pink-650 hover:text-pink-850 dark:text-amber-400 dark:hover:text-amber-500 rounded-lg hover:bg-pink-100/60 dark:hover:bg-slate-800 transition-all font-bold text-xs flex items-center gap-1 cursor-pointer active:scale-90"
+                                    title="Visualizar Detalhes do Cartão"
+                                  >
+                                    <Info className="h-4 w-4" />
+                                    <span>Ver Itens</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteCCGroup(tx.data_referencia.substring(0, 7))}
+                                    className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all active:scale-90 cursor-pointer"
+                                    title="Excluir Fatura Completa"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => startEditTransaction(tx)}
+                                    className="p-1.5 text-slate-400 hover:text-pink-600 dark:hover:text-amber-400 rounded-lg transition-all"
+                                    title="Editar Lançamento"
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => startDuplicateTransaction(tx)}
+                                    className="p-1.5 text-slate-400 hover:text-pink-600 dark:hover:text-amber-400 rounded-lg transition-all"
+                                    title="Copiar Lançamento"
+                                  >
+                                    <Copy className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteTransaction(tx.id)}
+                                    className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-455 rounded-lg transition-all"
+                                    title="Excluir Lançamento"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -2804,6 +3273,14 @@ export default function App() {
                                 type="button"
                                 onClick={() => {
                                   setFormCategoria(c)
+                                  if (c === 'Cartão de Crédito') {
+                                    setFormQuemPagou('Felipe / Thaís')
+                                    if (!editingTransactionId) {
+                                      setFormStatus('Pendente')
+                                    }
+                                  } else if (formQuemPagou === 'Felipe / Thaís') {
+                                    setFormQuemPagou('Felipe')
+                                  }
                                   setIsFormCategoriaDropdownOpen(false)
                                 }}
                                 className={`w-full text-left px-4 py-2 text-sm font-semibold transition-colors cursor-pointer ${isSelected
@@ -2840,11 +3317,18 @@ export default function App() {
                   <div className="relative">
                     <button
                       type="button"
+                      disabled={formCategoria === 'Cartão de Crédito'}
                       onClick={() => setIsFormQuemPagouDropdownOpen(!isFormQuemPagouDropdownOpen)}
-                      className="flex items-center justify-between gap-2.5 w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2.5 px-3 text-sm text-pink-900 dark:text-slate-200 font-semibold outline-none cursor-pointer focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20 hover:bg-pink-100/50 dark:hover:bg-slate-750 transition-all text-left"
+                      className={`flex items-center justify-between gap-2.5 w-full border rounded-xl py-2.5 px-3 text-sm font-semibold outline-none transition-all text-left ${
+                        formCategoria === 'Cartão de Crédito'
+                          ? 'bg-slate-100 dark:bg-slate-800/50 border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                          : 'bg-pink-50 dark:bg-slate-800 border-pink-200 dark:border-slate-700 text-pink-900 dark:text-slate-200 cursor-pointer focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20 hover:bg-pink-100/50 dark:hover:bg-slate-750'
+                      }`}
                     >
                       <span>{formQuemPagou}</span>
-                      <ChevronDown className={`h-4.5 w-4.5 text-pink-600 dark:text-amber-400 transition-transform duration-200 ${isFormQuemPagouDropdownOpen ? 'rotate-180' : ''}`} />
+                      {formCategoria !== 'Cartão de Crédito' && (
+                        <ChevronDown className={`h-4.5 w-4.5 text-pink-600 dark:text-amber-400 transition-transform duration-200 ${isFormQuemPagouDropdownOpen ? 'rotate-180' : ''}`} />
+                      )}
                     </button>
 
                     {isFormQuemPagouDropdownOpen && (
@@ -2943,11 +3427,17 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-2 bg-pink-200/50 dark:bg-slate-800 p-1 rounded-xl">
                   <button
                     type="button"
+                    disabled={formCategoria === 'Cartão de Crédito' && !editingTransactionId}
                     onClick={() => setFormStatus('Pago')}
-                    className={`py-2 rounded-lg text-xs font-semibold transition-all ${formStatus === 'Pago'
-                      ? 'bg-pink-50 dark:bg-slate-700 text-pink-900 dark:text-white shadow-md'
-                      : 'text-pink-850 dark:text-slate-400 hover:text-pink-955'
-                      }`}
+                    className={`py-2 rounded-lg text-xs font-semibold transition-all ${
+                      formStatus === 'Pago'
+                        ? 'bg-pink-50 dark:bg-slate-700 text-pink-900 dark:text-white shadow-md'
+                        : 'text-pink-850 dark:text-slate-400 hover:text-pink-955'
+                    } ${
+                      formCategoria === 'Cartão de Crédito' && !editingTransactionId
+                        ? 'opacity-40 cursor-not-allowed'
+                        : 'cursor-pointer'
+                    }`}
                   >
                     Pago
                   </button>
@@ -3417,6 +3907,414 @@ export default function App() {
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL DE DETALHES DO CARTÃO DE CRÉDITO --- */}
+      {isCCModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in">
+          <div
+            className="w-full max-w-4xl bg-pink-50 dark:bg-slate-900 rounded-3xl shadow-2xl border border-pink-200/60 dark:border-slate-800/50 overflow-hidden animate-slide-up flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Cabeçalho */}
+            <div className="p-6 bg-gradient-to-r from-pink-600 to-rose-600 dark:from-slate-900 dark:to-slate-950 text-white flex justify-between items-center flex-shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-white/10 rounded-lg">
+                  <CreditCard className="h-5 w-5 text-pink-100 dark:text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base">Fatura de {formatCCModalMonthName(ccModalMonth)}</h3>
+                  <p className="text-[10px] text-pink-200/90 dark:text-slate-400">Compras no Cartão de Crédito (Compartilhado Felipe / Thaís)</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsCCModalOpen(false)
+                  setEditingCCItemId(null)
+                }}
+                className="text-white/85 hover:text-white text-sm font-bold bg-white/15 hover:bg-white/20 px-2.5 py-1 rounded-lg transition-all"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Conteúdo Principal (Scrollable) */}
+            <div className="p-6 space-y-6 overflow-y-auto flex-1">
+              
+              {/* Cards de Resumo */}
+              {(() => {
+                const items = transactions.filter(t => t.categoria === 'Cartão de Crédito' && t.data_referencia.substring(0, 7) === ccModalMonth);
+                const total = items.reduce((sum, item) => sum + item.valor, 0);
+                const pago = items.filter(item => item.status === 'Pago').reduce((sum, item) => sum + item.valor, 0);
+                const pendente = items.filter(item => item.status === 'Pendente').reduce((sum, item) => sum + item.valor, 0);
+
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {/* Card Total */}
+                    <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-pink-100 dark:border-slate-800 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Total da Fatura</span>
+                        <h4 className="text-xl font-extrabold text-slate-800 dark:text-white mt-1">{formatCurrency(total)}</h4>
+                      </div>
+                      <div className="p-2.5 bg-pink-100/50 dark:bg-slate-900 rounded-xl">
+                        <CreditCard className="h-5 w-5 text-pink-600 dark:text-amber-400" />
+                      </div>
+                    </div>
+
+                    {/* Card Pago */}
+                    <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-pink-100 dark:border-slate-800 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Total Pago</span>
+                        <h4 className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">{formatCurrency(pago)}</h4>
+                      </div>
+                      <div className="p-2.5 bg-emerald-50 dark:bg-slate-900 rounded-xl">
+                        <Check className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                      </div>
+                    </div>
+
+                    {/* Card Pendente */}
+                    <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-pink-100 dark:border-slate-800 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">A Pagar (Pendente)</span>
+                        <h4 className="text-xl font-extrabold text-amber-500 dark:text-amber-400 mt-1">{formatCurrency(pendente)}</h4>
+                      </div>
+                      <div className="p-2.5 bg-amber-50 dark:bg-slate-900 rounded-xl">
+                        <Clock className="h-5 w-5 text-amber-500 dark:text-amber-400" />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Formulário de Adição Rápida */}
+              <div className="bg-white dark:bg-slate-800/40 p-4 rounded-2xl border border-pink-100 dark:border-slate-800">
+                <h4 className="text-xs font-extrabold text-slate-700 dark:text-slate-350 mb-3 uppercase tracking-wider">Adicionar Nova Compra</h4>
+                <form onSubmit={handleAddCCItem} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                  
+                  {/* Data */}
+                  <div className="md:col-span-2 space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">Data</label>
+                    <input
+                      type="date"
+                      required
+                      value={formCCDate}
+                      onChange={(e) => setFormCCDate(e.target.value)}
+                      className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2 px-3 text-xs text-pink-900 dark:text-slate-200 outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
+                    />
+                  </div>
+
+                  {/* Descrição */}
+                  <div className="md:col-span-3 space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">Descrição</label>
+                    <input
+                      type="text"
+                      required
+                      value={formCCSubcategory}
+                      onChange={(e) => setFormCCSubcategory(capitalizeWords(e.target.value))}
+                      placeholder="Ex: Assinatura Netflix, Farmácia..."
+                      className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2 px-3 text-xs text-pink-955 dark:text-white font-medium outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
+                    />
+                  </div>
+
+                  {/* Valor */}
+                  <div className="md:col-span-2 space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">Valor (R$)</label>
+                    <div className="relative rounded-xl shadow-sm">
+                      <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                        <span className="text-slate-400 font-semibold text-[10px]">R$</span>
+                      </div>
+                      <input
+                        type="text"
+                        required
+                        value={formCCValor}
+                        onChange={(e) => {
+                          const cleanDigits = e.target.value.replace(/\D/g, '');
+                          if (!cleanDigits) {
+                            setFormCCValor('');
+                            return;
+                          }
+                          const cents = parseInt(cleanDigits, 10);
+                          if (cents === 0) {
+                            setFormCCValor('');
+                            return;
+                          }
+                          const formatted = (cents / 100).toLocaleString('pt-BR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                          });
+                          setFormCCValor(formatted);
+                        }}
+                        placeholder="0,00"
+                        className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl pl-7 pr-3 py-2 text-xs text-pink-955 dark:text-white font-bold outline-none focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Recorrência / Parcelas */}
+                  <div className="md:col-span-2 space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">Parcelas</label>
+                    <select
+                      value={formCCRecorrencia}
+                      onChange={(e) => setFormCCRecorrencia(parseInt(e.target.value, 10))}
+                      className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-xl py-2 px-3 text-xs text-pink-900 dark:text-slate-200 font-bold outline-none cursor-pointer focus:border-pink-500 dark:focus:border-amber-500 focus:ring-2 focus:ring-pink-500/20 dark:focus:ring-amber-500/20"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 18, 24].map((r) => (
+                        <option key={r} value={r}>
+                          {r === 1 ? '1x (À vista)' : `${r}x`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Status */}
+                  <div className="md:col-span-2 space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">Status</label>
+                    <select
+                      disabled
+                      value="Pendente"
+                      className="w-full bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-xl py-2 px-3 text-xs text-slate-450 dark:text-slate-500 font-bold outline-none cursor-not-allowed"
+                    >
+                      <option value="Pendente">Pendente</option>
+                    </select>
+                  </div>
+
+                  {/* Botão de Adicionar */}
+                  <div className="md:col-span-1">
+                    <button
+                      type="submit"
+                      className="w-full bg-gradient-to-r from-pink-600 to-rose-600 dark:from-amber-500 dark:to-amber-600 hover:opacity-90 dark:text-slate-950 font-bold py-2 px-3 rounded-xl transition-all active:scale-95 text-xs flex items-center justify-center gap-1"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>Add</span>
+                    </button>
+                  </div>
+
+                </form>
+              </div>
+
+              {/* Tabela de Compras */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-extrabold text-slate-700 dark:text-slate-350 uppercase tracking-wider">Itens da Fatura</h4>
+                
+                <div className="overflow-x-auto rounded-xl border border-pink-200 dark:border-slate-800">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-pink-200/30 dark:bg-slate-900/60 text-pink-700 dark:text-amber-400 font-bold border-b border-pink-200 dark:border-slate-800">
+                        <th className="p-3 w-[10%]">Data</th>
+                        <th className="p-3 w-[28%]">Descrição</th>
+                        <th className="p-3 w-[16%]">Categoria</th>
+                        <th className="p-3 w-[13%]">Parcelas</th>
+                        <th className="p-3 w-[12%]">Valor</th>
+                        <th className="p-3 w-[11%]">Status</th>
+                        <th className="p-3 w-[10%] text-center">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-pink-200/50 dark:divide-slate-800/40">
+                      {(() => {
+                        const items = transactions.filter(t => t.categoria === 'Cartão de Crédito' && t.data_referencia.substring(0, 7) === ccModalMonth);
+                        
+                        if (items.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan="7" className="p-6 text-center text-slate-400 dark:text-slate-500 font-medium">
+                                Nenhuma compra lançada nesta fatura.
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        // Ordenar itens da fatura por data de referência decrescente
+                        const sortedItems = [...items].sort((a, b) => b.data_referencia.localeCompare(a.data_referencia) || b.criado_em.localeCompare(a.criado_em));
+
+                        return sortedItems.map(item => {
+                          const isEditing = editingCCItemId === item.id;
+
+                          if (isEditing) {
+                            return (
+                              <tr key={item.id} className="bg-pink-100/30 dark:bg-slate-800/60">
+                                {/* Edit Date */}
+                                <td className="p-2">
+                                  <input
+                                    type="date"
+                                    required
+                                    value={editCCDate}
+                                    onChange={(e) => setEditCCDate(e.target.value)}
+                                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-lg py-1 px-2 text-[11px] text-pink-900 dark:text-slate-200 outline-none"
+                                  />
+                                </td>
+                                
+                                {/* Edit Description */}
+                                <td className="p-2">
+                                  <input
+                                    type="text"
+                                    required
+                                    value={editCCSubcategory}
+                                    onChange={(e) => setEditCCSubcategory(capitalizeWords(e.target.value))}
+                                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-lg py-1 px-2 text-[11px] text-pink-955 dark:text-white outline-none"
+                                  />
+                                </td>
+
+                                {/* Edit Categoria */}
+                                <td className="p-2">
+                                  <select
+                                    value={editCCCategoria}
+                                    onChange={(e) => setEditCCCategoria(e.target.value)}
+                                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-lg py-1 px-2 text-[11px] text-pink-900 dark:text-slate-200 font-bold outline-none cursor-pointer"
+                                  >
+                                    {categoriasValidas.filter(c => c !== 'Transferência').map(c => (
+                                      <option key={c} value={c}>{c}</option>
+                                    ))}
+                                  </select>
+                                </td>
+
+                                {/* Edit Parcelas */}
+                                <td className="p-2">
+                                  <select
+                                    value={editCCRecorrencia}
+                                    onChange={(e) => setEditCCRecorrencia(parseInt(e.target.value, 10))}
+                                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-lg py-1 px-2 text-[11px] text-pink-900 dark:text-slate-200 font-bold outline-none cursor-pointer"
+                                  >
+                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 18, 24].map((r) => (
+                                      <option key={r} value={r}>
+                                        {r === 1 ? '1x' : `${r}x`}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </td>
+
+                                {/* Edit Value */}
+                                <td className="p-2">
+                                  <input
+                                    type="text"
+                                    required
+                                    value={editCCValor}
+                                    onChange={(e) => {
+                                      const cleanDigits = e.target.value.replace(/\D/g, '');
+                                      if (!cleanDigits) {
+                                        setEditCCValor('');
+                                        return;
+                                      }
+                                      const cents = parseInt(cleanDigits, 10);
+                                      if (cents === 0) {
+                                        setEditCCValor('');
+                                        return;
+                                      }
+                                      const formatted = (cents / 100).toLocaleString('pt-BR', {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2
+                                      });
+                                      setEditCCValor(formatted);
+                                    }}
+                                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-lg py-1 px-2 text-[11px] text-pink-955 dark:text-white font-bold outline-none"
+                                  />
+                                </td>
+
+                                {/* Edit Status */}
+                                <td className="p-2">
+                                  <select
+                                    value={editCCStatus}
+                                    onChange={(e) => setEditCCStatus(e.target.value)}
+                                    className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-lg py-1 px-2 text-[11px] text-pink-900 dark:text-slate-200 font-bold outline-none cursor-pointer"
+                                  >
+                                    <option value="Pendente">Pendente</option>
+                                    <option value="Pago">Pago</option>
+                                  </select>
+                                </td>
+
+                                {/* Edit Actions */}
+                                <td className="p-2 text-center">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <button
+                                      onClick={() => handleSaveCCItemEdit(item.id)}
+                                      className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-slate-800 rounded transition-all cursor-pointer"
+                                      title="Salvar Alterações"
+                                    >
+                                      <Check className="h-4.5 w-4.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => setEditingCCItemId(null)}
+                                      className="p-1 text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-850 rounded transition-all cursor-pointer"
+                                      title="Cancelar"
+                                    >
+                                      <X className="h-4.5 w-4.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          }
+
+                          return (
+                            <tr key={item.id} className="hover:bg-pink-100/20 dark:hover:bg-slate-900/30 transition-colors">
+                              <td className="p-3 text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">
+                                {formatDate(item.data_referencia)}
+                              </td>
+                              <td className="p-3 font-semibold text-slate-700 dark:text-slate-350 break-all">
+                                {item.subcategoria}
+                              </td>
+                              <td className="p-3 text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">
+                                {getCategoryIcon(item.categoria)} {item.categoria}
+                              </td>
+                              <td className="p-3 text-slate-500 dark:text-slate-400 font-semibold whitespace-nowrap">
+                                {(() => {
+                                  const match = item.subcategoria.match(/\((\d+)\/(\d+)\)/);
+                                  return match ? `${match[1]} de ${match[2]}` : '1x (À vista)';
+                                })()}
+                              </td>
+                              <td className="p-3 font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap">
+                                {formatCurrency(item.valor)}
+                              </td>
+                              <td className="p-3 whitespace-nowrap">
+                                <span
+                                  onClick={() => toggleCCItemStatus(item)}
+                                  className={`inline-flex items-center gap-1 py-0.5 px-2 rounded-full font-bold text-[10px] cursor-pointer hover:opacity-85 select-none transition-all active:scale-95 ${
+                                    item.status === 'Pago'
+                                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/35 dark:text-emerald-400'
+                                      : 'bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-400'
+                                  }`}
+                                  title="Clique para alternar status"
+                                >
+                                  {item.status === 'Pago' ? (
+                                    <>
+                                      <Check className="h-3 w-3" /> Pago
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Clock className="h-3 w-3" /> Pendente
+                                    </>
+                                  )}
+                                </span>
+                              </td>
+                              <td className="p-3 text-center whitespace-nowrap">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    onClick={() => startEditCCItem(item)}
+                                    className="p-1 text-slate-400 hover:text-pink-650 dark:hover:text-amber-400 rounded hover:bg-pink-100/60 dark:hover:bg-slate-800 transition-all active:scale-90 cursor-pointer"
+                                    title="Editar Item"
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteTransaction(item.id)}
+                                    className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all active:scale-90 cursor-pointer"
+                                    title="Excluir Item"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
           </div>
         </div>
       )}

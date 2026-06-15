@@ -146,6 +146,28 @@ export const initialTransactions = [
     quem_pagou: 'Felipe',
     status: 'Pendente' // ainda pendente para demonstrar visualmente
   },
+  {
+    id: 't_cc_1',
+    criado_em: '2026-05-10T14:20:00Z',
+    data_referencia: '2026-05-10',
+    tipo: 'Despesa',
+    categoria: 'Cartão de Crédito',
+    subcategoria: 'Assinatura Netflix',
+    valor: 55.90,
+    quem_pagou: 'Felipe',
+    status: 'Pago'
+  },
+  {
+    id: 't_cc_2',
+    criado_em: '2026-05-12T19:45:00Z',
+    data_referencia: '2026-05-12',
+    tipo: 'Despesa',
+    categoria: 'Cartão de Crédito',
+    subcategoria: 'Supermercado Carrefour',
+    valor: 350.00,
+    quem_pagou: 'Felipe',
+    status: 'Pendente'
+  },
 
   // --- MÊS ANTERIOR: ABRIL 2026 ---
   {
