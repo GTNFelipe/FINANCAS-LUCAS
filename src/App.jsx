@@ -171,8 +171,10 @@ export default function App() {
 
   useEffect(() => {
     if (!isModalOpen) {
-      setEditingTransactionId(null)
-      setEditingCCGroupMonth(null)
+      setTimeout(() => {
+        setEditingTransactionId(null)
+        setEditingCCGroupMonth(null)
+      }, 0)
     }
   }, [isModalOpen])
 
@@ -274,8 +276,8 @@ export default function App() {
   // --- Funções de Ajuda e Lógica para Importação Inteligente de Planilhas ---
   const guessCategoryAndTipo = (subcatStr, valueNum) => {
     const lower = subcatStr.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    let category = 'Casa';
-    let tipo = valueNum >= 0 ? 'Receita' : 'Despesa';
+    let category;
+    let tipo;
     
     if (lower.includes('salario') || lower.includes('proventos') || lower.includes('rendimento') || lower.includes('recebimento') || lower.includes('renda extra') || lower.includes('ganho') || lower.includes('ted ') || lower.includes('pix recebido')) {
       category = 'Salário';
@@ -309,7 +311,7 @@ export default function App() {
       tipo = 'Despesa';
     } else {
       category = 'Imprevistos';
-      tipo = 'Despesa';
+      tipo = valueNum >= 0 ? 'Receita' : 'Despesa';
     }
     return { category, tipo };
   }
@@ -667,7 +669,7 @@ export default function App() {
               tipo = guessed.tipo
             }
 
-            let categoria = 'Casa'
+            let categoria;
             if (ctx.categoryIdx !== -1 && columns[ctx.categoryIdx]) {
               const rawCat = columns[ctx.categoryIdx].trim()
               const match = categoriasValidas.find(cv => cv.toLowerCase() === rawCat.toLowerCase())
