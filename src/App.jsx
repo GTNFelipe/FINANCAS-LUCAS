@@ -82,7 +82,7 @@ export default function App() {
   const [formTipo, setFormTipo] = useState('Despesa') // 'Receita' | 'Despesa'
   const [formCategoria, setFormCategoria] = useState('Casa')
   const [formSubcategoria, setFormSubcategoria] = useState('')
-  const [formQuemPagou, setFormQuemPagou] = useState('Felipe') // 'Felipe' | 'Thaís'
+  const [formQuemPagou, setFormQuemPagou] = useState('Lucas') // 'Lucas' | 'Carol'
   const [formStatus, setFormStatus] = useState('Pago') // 'Pago' | 'Pendente'
   const [formRecorrencia, setFormRecorrencia] = useState(1) // Padrão 1x (Repetições/Parcelas)
   const [formDataReferencia, setFormDataReferencia] = useState(() => {
@@ -102,8 +102,8 @@ export default function App() {
   // --- Estados do Formulário de Transferência ---
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false)
   const [formTransferValor, setFormTransferValor] = useState('')
-  const [formTransferDe, setFormTransferDe] = useState('Felipe')
-  const [formTransferPara, setFormTransferPara] = useState('Thaís')
+  const [formTransferDe, setFormTransferDe] = useState('Lucas')
+  const [formTransferPara, setFormTransferPara] = useState('Carol')
   const [formTransferDesc, setFormTransferDesc] = useState('')
   const [formTransferData, setFormTransferData] = useState(() => {
     const today = new Date()
@@ -131,8 +131,8 @@ export default function App() {
   const [editCCStatus, setEditCCStatus] = useState('Pendente')
   const [editCCCategoria, setEditCCCategoria] = useState('Cartão de Crédito')
   const [editCCRecorrencia, setEditCCRecorrencia] = useState(1)
-  const [editCCQuemPagou, setEditCCQuemPagou] = useState('Felipe')
-  const [formCCQuemPagou, setFormCCQuemPagou] = useState('Felipe')
+  const [editCCQuemPagou, setEditCCQuemPagou] = useState('Lucas')
+  const [formCCQuemPagou, setFormCCQuemPagou] = useState('Lucas')
   const [editingCCGroupMonth, setEditingCCGroupMonth] = useState(null)
 
   // Categorias válidas fornecidas pelo usuário (em ordem alfabética)
@@ -151,7 +151,6 @@ export default function App() {
     'Saúde',
     'Transferência',
     'Transporte',
-    'Vale Alimentação/Refeição',
   ]
 
   useEffect(() => {
@@ -227,51 +226,7 @@ export default function App() {
     sessionStorage.setItem('financas_last_checked_month', todayStr)
   }
 
-  // Função para verificar e gerar a recarga mensal automática do Vale Alimentação/Refeição Flexível (R$ 1.004,00)
-  const checkVRVARecharge = async (loadedTxs, isSupabaseActive) => {
-    const currentMonth = getTodayMonthStr() // "YYYY-MM"
-    const hasRecharge = loadedTxs.some(t =>
-      t.categoria === 'Vale Alimentação/Refeição' &&
-      t.tipo === 'Receita' &&
-      t.data_referencia.substring(0, 7) === currentMonth
-    )
-
-    if (!hasRecharge) {
-      const newRecharge = {
-        id: 'tx-vrva-recharge-' + Date.now(),
-        criado_em: new Date().toISOString(),
-        data_referencia: `${currentMonth}-01`,
-        tipo: 'Receita',
-        categoria: 'Vale Alimentação/Refeição',
-        subcategoria: 'Recarga Mensal Automática',
-        valor: 1004.00,
-        quem_pagou: 'Felipe',
-        status: 'Pago'
-      }
-
-      if (isSupabaseActive && isSupabaseConfigured) {
-        try {
-          const { data, error } = await supabase
-            .from('transacoes')
-            .insert([newRecharge])
-            .select()
-
-          if (!error && data && data.length > 0) {
-            setTransactions(prev => [data[0], ...prev])
-            return [data[0], ...loadedTxs]
-          }
-        } catch (err) {
-          console.error("Erro ao inserir recarga automatica no Supabase:", err.message)
-        }
-      }
-
-      const updatedTxs = [newRecharge, ...loadedTxs]
-      setTransactions(updatedTxs)
-      return updatedTxs
-    }
-
-    return loadedTxs
-  }
+  
 
   // --- Funções de Ajuda e Lógica para Importação Inteligente de Planilhas ---
   const guessCategoryAndTipo = (subcatStr, valueNum) => {
@@ -688,9 +643,9 @@ export default function App() {
             let quem_pagou = 'Lucas'
             if (ctx.quemIdx !== -1 && columns[ctx.quemIdx]) {
               const rawQuem = columns[ctx.quemIdx].toLowerCase()
-              if (rawQuem.includes('carol') || rawQuem === 'c' || rawQuem === 't' || rawQuem === 'thais') {
+              if (rawQuem.includes('carol') || rawQuem === 'c' || rawQuem === 't' || rawQuem === 'carol') {
                 quem_pagou = 'Carol'
-              } else if (rawQuem.includes('lucas') || rawQuem === 'l' || rawQuem === 'f' || rawQuem === 'felipe') {
+              } else if (rawQuem.includes('lucas') || rawQuem === 'l' || rawQuem === 'f' || rawQuem === 'lucas') {
                 quem_pagou = 'Lucas'
               } else if (rawQuem.includes('/') || rawQuem.includes('&') || rawQuem.includes('ambos')) {
                 quem_pagou = 'Lucas / Carol'
@@ -771,7 +726,7 @@ export default function App() {
     setTransactions(loadedTxs)
     setPoupancas(loadedPoupancas)
 
-    const txsWithRecharge = await checkVRVARecharge(loadedTxs, false)
+    const txsWithRecharge = loadedTxs
     checkMonthTurn(txsWithRecharge, false)
   }
 
@@ -802,7 +757,7 @@ export default function App() {
           console.warn("Tabela 'poupancas' nao encontrada no Supabase. Carregando dados iniciais:", pPerr.message)
           setPoupancas(initialPoupanca)
         }
-        const txsWithRecharge = await checkVRVARecharge(txData || [], true)
+        const txsWithRecharge = txData || []
         checkMonthTurn(txsWithRecharge, true)
       } catch (err) {
         console.error("Falha ao sincronizar com o Supabase, ativando modo local:", err.message)
@@ -839,7 +794,7 @@ export default function App() {
     setFormCategoria(tx.categoria)
     setFormSubcategoria(tx.subcategoria)
     if (tx.categoria === 'Cartão de Crédito') {
-      setFormQuemPagou(tx.quem_pagou === 'Thaís' || tx.quem_pagou === 'Thais' ? 'Thaís' : 'Felipe')
+      setFormQuemPagou(tx.quem_pagou === 'Carol' || tx.quem_pagou === 'Carol' ? 'Carol' : 'Lucas')
       setFormStatus('Pendente')
     } else {
       setFormQuemPagou(tx.quem_pagou)
@@ -1251,7 +1206,7 @@ export default function App() {
 
     // Determinar pagador da fatura consolidada
     const uniquePayers = [...new Set(cardItems.map(t => t.quem_pagou))]
-    let currentPayer = 'Felipe / Thaís'
+    let currentPayer = 'Lucas / Carol'
     if (uniquePayers.length === 1) {
       currentPayer = uniquePayers[0]
     }
@@ -1328,7 +1283,7 @@ export default function App() {
       setFormCCSubcategory('')
       setFormCCValor('')
       setFormCCRecorrencia(1)
-      setFormCCQuemPagou('Felipe')
+      setFormCCQuemPagou('Lucas')
 
     } catch (err) {
       console.error("Erro ao adicionar item no cartão:", err.message)
@@ -1344,7 +1299,7 @@ export default function App() {
     setEditCCValor(Number(item.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
     setEditCCStatus(item.status)
     setEditCCCategoria(item.categoria)
-    setEditCCQuemPagou(item.quem_pagou === 'Thaís' || item.quem_pagou === 'Thais' ? 'Thaís' : 'Felipe')
+    setEditCCQuemPagou(item.quem_pagou === 'Carol' || item.quem_pagou === 'Carol' ? 'Carol' : 'Lucas')
 
     const match = item.subcategoria.match(/(.*?)\s*\((\d+)\/(\d+)\)/)
     if (match) {
@@ -1685,7 +1640,7 @@ export default function App() {
     }
   }
 
-  // --- Função para Adicionar Transferência entre Felipe e Thaís ---
+  // --- Função para Adicionar Transferência entre Lucas e Carol ---
   const handleSaveTransfer = async (e) => {
     e.preventDefault()
     const valorNum = parseBRL(formTransferValor)
@@ -1700,7 +1655,7 @@ export default function App() {
     }
 
     const de = formTransferDe
-    const para = de === 'Felipe' ? 'Thaís' : 'Felipe'
+    const para = de === 'Lucas' ? 'Carol' : 'Lucas'
     const desc = formTransferDesc.trim() ? `: ${formTransferDesc.trim()}` : ''
 
     const txDe = {
@@ -1765,7 +1720,7 @@ export default function App() {
 
   // --- Cálculos Financeiros ---
   const activeMonthTransactions = transactions.filter(t => t.data_referencia.substring(0, 7) === selectedMonth)
-  const activeMonthCashTransactions = activeMonthTransactions.filter(t => t.categoria !== 'Vale Alimentação/Refeição' && t.categoria !== 'Transferência')
+  const activeMonthCashTransactions = activeMonthTransactions.filter(t => t.categoria !== 'Transferência')
 
   // 1. Receita Total do Mês
   const totalReceita = activeMonthCashTransactions
@@ -1781,17 +1736,17 @@ export default function App() {
     .filter(t => t.tipo === 'Receita' && t.status === 'Pendente')
     .reduce((sum, t) => sum + t.valor, 0)
 
-  const receitasFelipe = activeMonthCashTransactions
-    .filter(t => t.tipo === 'Receita' && t.quem_pagou === 'Felipe')
+  const receitasLucas = activeMonthCashTransactions
+    .filter(t => t.tipo === 'Receita' && t.quem_pagou === 'Lucas')
     .reduce((sum, t) => sum + t.valor, 0)
 
-  const receitasThais = activeMonthCashTransactions
-    .filter(t => t.tipo === 'Receita' && (t.quem_pagou === 'Thaís' || t.quem_pagou === 'Thais'))
+  const receitasCarol = activeMonthCashTransactions
+    .filter(t => t.tipo === 'Receita' && (t.quem_pagou === 'Carol' || t.quem_pagou === 'Carol'))
     .reduce((sum, t) => sum + t.valor, 0)
 
-  const totalReceitasProporcao = receitasFelipe + receitasThais
-  const pctReceitaFelipe = totalReceitasProporcao > 0 ? (receitasFelipe / totalReceitasProporcao) * 100 : 50
-  const showReceitaSplitBar = receitasFelipe > 0 && receitasThais > 0
+  const totalReceitasProporcao = receitasLucas + receitasCarol
+  const pctReceitaLucas = totalReceitasProporcao > 0 ? (receitasLucas / totalReceitasProporcao) * 100 : 50
+  const showReceitaSplitBar = receitasLucas > 0 && receitasCarol > 0
 
   // 2. Despesa Total do Mês
   const totalDespesa = activeMonthCashTransactions
@@ -1807,33 +1762,33 @@ export default function App() {
     .filter(t => t.tipo === 'Despesa' && t.status === 'Pendente')
     .reduce((sum, t) => sum + t.valor, 0)
 
-  const despesasFelipe = activeMonthCashTransactions
+  const despesasLucas = activeMonthCashTransactions
     .filter(t => t.tipo === 'Despesa')
     .reduce((sum, t) => {
       if (t.categoria === 'Cartão de Crédito') {
         return sum + (t.valor / 2)
       }
-      if (t.quem_pagou === 'Felipe') {
+      if (t.quem_pagou === 'Lucas') {
         return sum + t.valor
       }
       return sum
     }, 0)
 
-  const despesasThais = activeMonthCashTransactions
+  const despesasCarol = activeMonthCashTransactions
     .filter(t => t.tipo === 'Despesa')
     .reduce((sum, t) => {
       if (t.categoria === 'Cartão de Crédito') {
         return sum + (t.valor / 2)
       }
-      if (t.quem_pagou === 'Thaís' || t.quem_pagou === 'Thais') {
+      if (t.quem_pagou === 'Carol' || t.quem_pagou === 'Carol') {
         return sum + t.valor
       }
       return sum
     }, 0)
 
-  const totalDespesasProporcao = despesasFelipe + despesasThais
-  const pctDespesaFelipe = totalDespesasProporcao > 0 ? (despesasFelipe / totalDespesasProporcao) * 100 : 50
-  const showDespesaSplitBar = despesasFelipe > 0 && despesasThais > 0
+  const totalDespesasProporcao = despesasLucas + despesasCarol
+  const pctDespesaLucas = totalDespesasProporcao > 0 ? (despesasLucas / totalDespesasProporcao) * 100 : 50
+  const showDespesaSplitBar = despesasLucas > 0 && despesasCarol > 0
 
   // Reserva de Emergência Inteligência
   const cleanMotivo = (name) => {
@@ -1960,7 +1915,7 @@ export default function App() {
 
   // 4. Dinheiro em Conta (Saldo Pago Acumulado de Todo o Histórico)
   const dinheiroEmConta = transactions
-    .filter(t => t.status === 'Pago' && t.categoria !== 'Vale Alimentação/Refeição')
+    .filter(t => t.status === 'Pago')
     .reduce((sum, t) => {
       if (t.tipo === 'Receita') {
         return sum + t.valor
@@ -1970,8 +1925,8 @@ export default function App() {
     }, 0)
 
   // Saldo em Carteira Individual
-  const dinheiroEmContaFelipe = transactions
-    .filter(t => t.status === 'Pago' && t.categoria !== 'Vale Alimentação/Refeição' && t.quem_pagou === 'Felipe')
+  const dinheiroEmContaLucas = transactions
+    .filter(t => t.status === 'Pago' && t.quem_pagou === 'Lucas')
     .reduce((sum, t) => {
       if (t.tipo === 'Receita') {
         return sum + t.valor
@@ -1980,8 +1935,8 @@ export default function App() {
       }
     }, 0)
 
-  const dinheiroEmContaThais = transactions
-    .filter(t => t.status === 'Pago' && t.categoria !== 'Vale Alimentação/Refeição' && (t.quem_pagou === 'Thaís' || t.quem_pagou === 'Thais'))
+  const dinheiroEmContaCarol = transactions
+    .filter(t => t.status === 'Pago' && (t.quem_pagou === 'Carol' || t.quem_pagou === 'Carol'))
     .reduce((sum, t) => {
       if (t.tipo === 'Receita') {
         return sum + t.valor
@@ -1990,9 +1945,9 @@ export default function App() {
       }
     }, 0)
 
-  const showSplitBar = dinheiroEmContaFelipe > 0 && dinheiroEmContaThais > 0
-  const totalCarteiras = Math.abs(dinheiroEmContaFelipe) + Math.abs(dinheiroEmContaThais)
-  const pctFelipe = totalCarteiras > 0 ? (Math.max(0, dinheiroEmContaFelipe) / totalCarteiras) * 100 : 50
+  const showSplitBar = dinheiroEmContaLucas > 0 && dinheiroEmContaCarol > 0
+  const totalCarteiras = Math.abs(dinheiroEmContaLucas) + Math.abs(dinheiroEmContaCarol)
+  const pctLucas = totalCarteiras > 0 ? (Math.max(0, dinheiroEmContaLucas) / totalCarteiras) * 100 : 50
 
   // 5. Cálculos de Disponibilidade de Saldo (Dinheiro Livre para Gastar)
   const totalDespesasPendentes = activeMonthCashTransactions
@@ -2001,16 +1956,6 @@ export default function App() {
 
   const dinheiroLivre = Math.max(0, dinheiroEmConta - totalDespesasPendentes)
 
-  // --- Cálculos do Vale Alimentação/Refeição Flexível (VA/VR) ---
-  const activeMonthVRVATxs = activeMonthTransactions.filter(t => t.categoria === 'Vale Alimentação/Refeição')
-  const cargaVRVA = activeMonthVRVATxs
-    .filter(t => t.tipo === 'Receita')
-    .reduce((sum, t) => sum + t.valor, 0)
-  const gastoVRVA = activeMonthVRVATxs
-    .filter(t => t.tipo === 'Despesa')
-    .reduce((sum, t) => sum + t.valor, 0)
-  const saldoRestanteVRVA = cargaVRVA - gastoVRVA
-  const pctVRVA = cargaVRVA > 0 ? (gastoVRVA / cargaVRVA) * 100 : 0
 
   const getFreeMoneyData = () => {
     if (dinheiroEmConta >= totalDespesasPendentes) {
@@ -2055,7 +2000,7 @@ export default function App() {
 
     // Determinar pagador da fatura consolidada
     const uniquePayers = [...new Set(ccTxs.map(t => t.quem_pagou))]
-    let invoicePayer = 'Felipe / Thaís'
+    let invoicePayer = 'Lucas / Carol'
     if (uniquePayers.length === 1) {
       invoicePayer = uniquePayers[0]
     }
@@ -2079,7 +2024,7 @@ export default function App() {
     : activeMonthNonCCTxs
 
   const filteredTransactions = activeMonthTransactionsWithGroupedCC.filter(t => {
-    const matchPerson = filterPerson === 'Todos' || t.quem_pagou === filterPerson || (t.categoria === 'Cartão de Crédito' && (filterPerson === 'Felipe' || filterPerson === 'Thaís'))
+    const matchPerson = filterPerson === 'Todos' || t.quem_pagou === filterPerson || (t.categoria === 'Cartão de Crédito' && (filterPerson === 'Lucas' || filterPerson === 'Carol'))
     const matchType = filterType === 'Todos' || t.tipo === filterType
     const matchStatus = filterStatus === 'Todos' || t.status === filterStatus
     const matchCategory = filterCategory === 'Todas' || t.categoria === filterCategory
@@ -2116,7 +2061,7 @@ export default function App() {
       monthsData[m] = { name: m, Receitas: 0, Despesas: 0 }
     })
 
-    transactions.filter(t => t.categoria !== 'Vale Alimentação/Refeição' && t.categoria !== 'Transferência').forEach(t => {
+    transactions.filter(t => t.categoria !== 'Transferência').forEach(t => {
       const m = t.data_referencia.substring(0, 7)
       if (monthsData[m]) {
         if (t.tipo === 'Receita') {
@@ -2226,7 +2171,6 @@ export default function App() {
       case 'Imprevistos': return '⚠️';
       case 'Salário': return '💵';
       case 'Renda Extra': return '💸';
-      case 'Vale Alimentação/Refeição': return '🍔';
       case 'Transferência': return '🔄';
       case 'Cartão de Crédito': return '💳';
       default: return '💰';
@@ -2244,7 +2188,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-pink-900 via-pink-900 to-pink-900 dark:from-amber-300 dark:via-amber-400 dark:to-amber-300 bg-clip-text text-transparent">
-                Finanças dos Santanas
+                Finanças dos Oliveiras
               </h1>
               <p className="text-xs text-pink-700/80 dark:text-slate-400 font-medium">Controle Compartilhado</p>
             </div>
@@ -2271,19 +2215,19 @@ export default function App() {
               )}
             </div>
 
-            {/* Avatares Felipe / Thaís */}
+            {/* Avatares Lucas / Carol */}
             <div className="flex -space-x-2">
               <span
                 className="inline-flex items-center justify-center h-8 w-8 rounded-full ring-2 ring-white dark:ring-slate-900 bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 text-xs font-bold"
-                title={`Espaço Felipe • Saldo: ${formatCurrency(dinheiroEmContaFelipe)}`}
+                title={`Espaço Lucas • Saldo: ${formatCurrency(dinheiroEmContaLucas)}`}
               >
-                F
+                L
               </span>
               <span
                 className="inline-flex items-center justify-center h-8 w-8 rounded-full ring-2 ring-white dark:ring-slate-900 bg-pink-100 text-pink-700 dark:bg-pink-950 dark:text-pink-300 text-xs font-bold"
-                title={`Espaço Thaís • Saldo: ${formatCurrency(dinheiroEmContaThais)}`}
+                title={`Espaço Carol • Saldo: ${formatCurrency(dinheiroEmContaCarol)}`}
               >
-                T
+                C
               </span>
             </div>
 
@@ -2482,17 +2426,17 @@ export default function App() {
                     <div className="flex items-center gap-1.5">
                       <span className="h-2 w-2 rounded-full bg-amber-500 flex-shrink-0"></span>
                       <div>
-                        <span className="text-slate-500 dark:text-slate-400 block text-[10px] font-medium uppercase tracking-wider">Felipe</span>
-                        <span className={`text-sm font-extrabold ${dinheiroEmContaFelipe >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-600 dark:text-rose-400'}`}>
-                          {formatCurrency(dinheiroEmContaFelipe)}
+                        <span className="text-slate-500 dark:text-slate-400 block text-[10px] font-medium uppercase tracking-wider">Lucas</span>
+                        <span className={`text-sm font-extrabold ${dinheiroEmContaLucas >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-600 dark:text-rose-400'}`}>
+                          {formatCurrency(dinheiroEmContaLucas)}
                         </span>
                       </div>
                     </div>
                     <div className="flex items-center justify-end gap-1.5 text-right">
                       <div>
-                        <span className="text-slate-500 dark:text-slate-400 block text-[10px] font-medium uppercase tracking-wider">Thaís</span>
-                        <span className={`text-sm font-extrabold ${dinheiroEmContaThais >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-600 dark:text-rose-400'}`}>
-                          {formatCurrency(dinheiroEmContaThais)}
+                        <span className="text-slate-500 dark:text-slate-400 block text-[10px] font-medium uppercase tracking-wider">Carol</span>
+                        <span className={`text-sm font-extrabold ${dinheiroEmContaCarol >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-600 dark:text-rose-400'}`}>
+                          {formatCurrency(dinheiroEmContaCarol)}
                         </span>
                       </div>
                       <span className="h-2 w-2 rounded-full bg-pink-500 flex-shrink-0"></span>
@@ -2504,13 +2448,13 @@ export default function App() {
                     <div className="w-full bg-pink-100/50 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden flex" title="Proporção do saldo na carteira de cada um">
                       <div
                         className="h-full bg-amber-500 dark:bg-amber-500 transition-all duration-500"
-                        style={{ width: `${pctFelipe}%` }}
-                        title={`Felipe: ${formatCurrency(dinheiroEmContaFelipe)} (${pctFelipe.toFixed(0)}%)`}
+                        style={{ width: `${pctLucas}%` }}
+                        title={`Lucas: ${formatCurrency(dinheiroEmContaLucas)} (${pctLucas.toFixed(0)}%)`}
                       ></div>
                       <div
                         className="h-full bg-pink-500 dark:bg-pink-400 transition-all duration-500"
-                        style={{ width: `${100 - pctFelipe}%` }}
-                        title={`Thaís: ${formatCurrency(dinheiroEmContaThais)} (${(100 - pctFelipe).toFixed(0)}%)`}
+                        style={{ width: `${100 - pctLucas}%` }}
+                        title={`Carol: ${formatCurrency(dinheiroEmContaCarol)} (${(100 - pctLucas).toFixed(0)}%)`}
                       ></div>
                     </div>
                   )}
@@ -2552,17 +2496,17 @@ export default function App() {
                       <div className="flex items-center gap-1.5">
                         <span className="h-2 w-2 rounded-full bg-amber-500 flex-shrink-0"></span>
                         <div>
-                          <span className="text-slate-500 dark:text-slate-400 block text-[10px] font-medium uppercase tracking-wider">Felipe</span>
+                          <span className="text-slate-500 dark:text-slate-400 block text-[10px] font-medium uppercase tracking-wider">Lucas</span>
                           <span className="text-sm font-extrabold text-slate-900 dark:text-white">
-                            {formatCurrency(receitasFelipe)}
+                            {formatCurrency(receitasLucas)}
                           </span>
                         </div>
                       </div>
                       <div className="flex items-center justify-end gap-1.5 text-right">
                         <div>
-                          <span className="text-slate-500 dark:text-slate-400 block text-[10px] font-medium uppercase tracking-wider">Thaís</span>
+                          <span className="text-slate-500 dark:text-slate-400 block text-[10px] font-medium uppercase tracking-wider">Carol</span>
                           <span className="text-sm font-extrabold text-slate-900 dark:text-white">
-                            {formatCurrency(receitasThais)}
+                            {formatCurrency(receitasCarol)}
                           </span>
                         </div>
                         <span className="h-2 w-2 rounded-full bg-pink-500 flex-shrink-0"></span>
@@ -2574,13 +2518,13 @@ export default function App() {
                       <div className="w-full bg-pink-100/50 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden flex" title="Proporção de receitas de cada um">
                         <div
                           className="h-full bg-amber-500 dark:bg-amber-500 transition-all duration-500"
-                          style={{ width: `${pctReceitaFelipe}%` }}
-                          title={`Felipe: ${formatCurrency(receitasFelipe)} (${pctReceitaFelipe.toFixed(0)}%)`}
+                          style={{ width: `${pctReceitaLucas}%` }}
+                          title={`Lucas: ${formatCurrency(receitasLucas)} (${pctReceitaLucas.toFixed(0)}%)`}
                         ></div>
                         <div
                           className="h-full bg-pink-500 dark:bg-pink-400 transition-all duration-500"
-                          style={{ width: `${100 - pctReceitaFelipe}%` }}
-                          title={`Thaís: ${formatCurrency(receitasThais)} (${(100 - pctReceitaFelipe).toFixed(0)}%)`}
+                          style={{ width: `${100 - pctReceitaLucas}%` }}
+                          title={`Carol: ${formatCurrency(receitasCarol)} (${(100 - pctReceitaLucas).toFixed(0)}%)`}
                         ></div>
                       </div>
                     )}
@@ -2623,17 +2567,17 @@ export default function App() {
                       <div className="flex items-center gap-1.5">
                         <span className="h-2 w-2 rounded-full bg-amber-500 flex-shrink-0"></span>
                         <div>
-                          <span className="text-slate-500 dark:text-slate-400 block text-[10px] font-medium uppercase tracking-wider">Felipe</span>
+                          <span className="text-slate-500 dark:text-slate-400 block text-[10px] font-medium uppercase tracking-wider">Lucas</span>
                           <span className="text-sm font-extrabold text-slate-900 dark:text-white">
-                            {formatCurrency(despesasFelipe)}
+                            {formatCurrency(despesasLucas)}
                           </span>
                         </div>
                       </div>
                       <div className="flex items-center justify-end gap-1.5 text-right">
                         <div>
-                          <span className="text-slate-500 dark:text-slate-400 block text-[10px] font-medium uppercase tracking-wider">Thaís</span>
+                          <span className="text-slate-500 dark:text-slate-400 block text-[10px] font-medium uppercase tracking-wider">Carol</span>
                           <span className="text-sm font-extrabold text-slate-900 dark:text-white">
-                            {formatCurrency(despesasThais)}
+                            {formatCurrency(despesasCarol)}
                           </span>
                         </div>
                         <span className="h-2 w-2 rounded-full bg-pink-500 flex-shrink-0"></span>
@@ -2645,13 +2589,13 @@ export default function App() {
                       <div className="w-full bg-pink-100/50 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden flex" title="Proporção de despesas de cada um">
                         <div
                           className="h-full bg-amber-500 dark:bg-amber-500 transition-all duration-500"
-                          style={{ width: `${pctDespesaFelipe}%` }}
-                          title={`Felipe: ${formatCurrency(despesasFelipe)} (${pctDespesaFelipe.toFixed(0)}%)`}
+                          style={{ width: `${pctDespesaLucas}%` }}
+                          title={`Lucas: ${formatCurrency(despesasLucas)} (${pctDespesaLucas.toFixed(0)}%)`}
                         ></div>
                         <div
                           className="h-full bg-pink-500 dark:bg-pink-400 transition-all duration-500"
-                          style={{ width: `${100 - pctDespesaFelipe}%` }}
-                          title={`Thaís: ${formatCurrency(despesasThais)} (${(100 - pctDespesaFelipe).toFixed(0)}%)`}
+                          style={{ width: `${100 - pctDespesaLucas}%` }}
+                          title={`Carol: ${formatCurrency(despesasCarol)} (${(100 - pctDespesaLucas).toFixed(0)}%)`}
                         ></div>
                       </div>
                     )}
@@ -3021,7 +2965,7 @@ export default function App() {
             </div>
 
             {/* --- Novo Layout: Dinheiro Livre, Vale Alimentação/Refeição e Progresso das Metas --- */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6">
 
               {/* Card de Dinheiro Livre (Donut Chart) */}
               <div className="glass-panel p-6 flex flex-col justify-between">
@@ -3115,58 +3059,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Card de Vale Alimentação/Refeição Flexível (VA/VR) */}
-              <div className="glass-panel p-6 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">Alimentação & Refeição</h3>
-                    <div className="p-2.5 bg-pink-100 dark:bg-orange-950/30 rounded-xl text-pink-600 dark:text-orange-400 shadow-inner">
-                      <CreditCard className="h-4.5 w-4.5" />
-                    </div>
-                  </div>
-
-                  <div className="mb-6">
-                    <span className="text-xs font-semibold text-slate-500">Saldo Restante Flexível</span>
-                    <h4 className={`text-3xl font-black mt-1 tracking-tight ${saldoRestanteVRVA >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-600 dark:text-rose-400'}`}>
-                      {formatCurrency(saldoRestanteVRVA)}
-                    </h4>
-                  </div>
-
-                  {/* Detalhes do Benefício */}
-                  <div className="space-y-4">
-                    {/* Barra de Progresso Gasto */}
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span className="text-slate-700 dark:text-slate-300">Uso do Limite Mensal</span>
-                        <span className="text-slate-500">{pctVRVA.toFixed(0)}%</span>
-                      </div>
-                      <div className="w-full bg-pink-50 dark:bg-orange-950/20 h-2.5 rounded-full overflow-hidden border border-pink-100/50 dark:border-orange-900/10">
-                        <div
-                          className="h-full bg-gradient-to-r from-pink-400 to-pink-600 dark:from-orange-400 dark:to-orange-600 transition-all duration-550"
-                          style={{ width: `${Math.min(100, pctVRVA)}%` }}
-                        ></div>
-                      </div>
-                    </div>
-
-                    {/* Info Geral de Gasto vs Recarga */}
-                    <div className="grid grid-cols-2 gap-2 pt-2">
-                      <div className="p-3 bg-pink-100/10 dark:bg-slate-900/50 rounded-xl border border-pink-200/20 dark:border-slate-800/20">
-                        <span className="text-[10px] text-slate-500 block">Recarregado</span>
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{formatCurrency(cargaVRVA)}</span>
-                      </div>
-                      <div className="p-3 bg-pink-100/10 dark:bg-slate-900/50 rounded-xl border border-pink-200/20 dark:border-slate-800/20">
-                        <span className="text-[10px] text-slate-500 block">Gasto Realizado</span>
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{formatCurrency(gastoVRVA)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-6 border-t border-pink-200 dark:border-amber-500/20 pt-4 flex justify-between items-center text-xs">
-                  <span className="text-slate-500 dark:text-slate-400 font-medium">Recarga automática:</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-300">Todo dia 01</span>
-                </div>
-              </div>
+              
 
             </div>
 
@@ -3240,7 +3133,7 @@ export default function App() {
                   </div>
 
                   <div className="flex bg-pink-200/40 dark:bg-slate-900 p-0.5 rounded-lg border border-pink-200/60 dark:border-amber-500/20 text-xs">
-                    {['Todos', 'Felipe', 'Thaís'].map(p => (
+                    {['Todos', 'Lucas', 'Carol'].map(p => (
                       <button
                         key={p}
                         onClick={() => setFilterPerson(p)}
@@ -3319,18 +3212,18 @@ export default function App() {
                           </td>
                           <td className="px-2 py-2.5">
                             <div className="truncate">
-                              {tx.quem_pagou === 'Felipe / Thaís' ? (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-bold bg-gradient-to-r from-amber-100 to-pink-100 text-slate-800 dark:from-amber-950/40 dark:to-pink-950/40 dark:text-slate-200 max-w-full truncate" title="Felipe / Thaís">
+                              {tx.quem_pagou === 'Lucas / Carol' ? (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-bold bg-gradient-to-r from-amber-100 to-pink-100 text-slate-800 dark:from-amber-950/40 dark:to-pink-950/40 dark:text-slate-200 max-w-full truncate" title="Lucas / Carol">
                                   <span className="h-1.5 w-1.5 rounded-full bg-amber-500 flex-shrink-0"></span>
                                   <span className="h-1.5 w-1.5 rounded-full bg-pink-500 -ml-0.5 flex-shrink-0"></span>
-                                  <span className="truncate ml-0.5">Felipe / Thaís</span>
+                                  <span className="truncate ml-0.5">Lucas / Carol</span>
                                 </span>
                               ) : (
-                                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-bold max-w-full truncate ${tx.quem_pagou === 'Felipe'
+                                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-bold max-w-full truncate ${tx.quem_pagou === 'Lucas'
                                   ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
                                   : 'bg-pink-50 text-pink-700 dark:bg-pink-950/40 dark:text-pink-300'
                                   }`} title={tx.quem_pagou}>
-                                  <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${tx.quem_pagou === 'Felipe' ? 'bg-amber-500' : 'bg-pink-500'}`}></span>
+                                  <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${tx.quem_pagou === 'Lucas' ? 'bg-amber-500' : 'bg-pink-500'}`}></span>
                                   <span className="truncate">{tx.quem_pagou}</span>
                                 </span>
                               )}
@@ -3555,7 +3448,7 @@ export default function App() {
 
                 {/* Quem Pagou */}
                 <div className="flex bg-pink-200/40 dark:bg-slate-900 p-0.5 rounded-lg border border-pink-200/60 dark:border-amber-500/20 text-xs">
-                  {['Todos', 'Felipe', 'Thaís'].map(p => (
+                  {['Todos', 'Lucas', 'Carol'].map(p => (
                     <button
                       key={p}
                       onClick={() => setFilterPerson(p)}
@@ -3688,18 +3581,18 @@ export default function App() {
                           </td>
                           <td className="px-2 py-2.5">
                             <div className="truncate">
-                              {tx.quem_pagou === 'Felipe / Thaís' ? (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-bold bg-gradient-to-r from-amber-100 to-pink-100 text-slate-800 dark:from-amber-950/40 dark:to-pink-950/40 dark:text-slate-200 max-w-full truncate" title="Felipe / Thaís">
+                              {tx.quem_pagou === 'Lucas / Carol' ? (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-bold bg-gradient-to-r from-amber-100 to-pink-100 text-slate-800 dark:from-amber-950/40 dark:to-pink-950/40 dark:text-slate-200 max-w-full truncate" title="Lucas / Carol">
                                   <span className="h-1.5 w-1.5 rounded-full bg-amber-500 flex-shrink-0"></span>
                                   <span className="h-1.5 w-1.5 rounded-full bg-pink-500 -ml-0.5 flex-shrink-0"></span>
-                                  <span className="truncate ml-0.5">Felipe / Thaís</span>
+                                  <span className="truncate ml-0.5">Lucas / Carol</span>
                                 </span>
                               ) : (
-                                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-bold max-w-full truncate ${tx.quem_pagou === 'Felipe'
+                                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-bold max-w-full truncate ${tx.quem_pagou === 'Lucas'
                                   ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
                                   : 'bg-pink-50 text-pink-700 dark:bg-pink-950/40 dark:text-pink-300'
                                   }`} title={tx.quem_pagou}>
-                                  <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${tx.quem_pagou === 'Felipe' ? 'bg-amber-500' : 'bg-pink-500'}`}></span>
+                                  <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${tx.quem_pagou === 'Lucas' ? 'bg-amber-500' : 'bg-pink-500'}`}></span>
                                   <span className="truncate">{tx.quem_pagou}</span>
                                 </span>
                               )}
@@ -3940,8 +3833,8 @@ export default function App() {
                                       setFormStatus('Pendente')
                                     }
                                   }
-                                  if (formQuemPagou === 'Felipe / Thaís') {
-                                    setFormQuemPagou('Felipe')
+                                  if (formQuemPagou === 'Lucas / Carol') {
+                                    setFormQuemPagou('Lucas')
                                   }
                                   setIsFormCategoriaDropdownOpen(false)
                                 }}
@@ -3998,7 +3891,7 @@ export default function App() {
                           onClick={() => setIsFormQuemPagouDropdownOpen(false)}
                         />
                         <div className="absolute left-0 mt-2 w-full bg-pink-50/95 dark:bg-slate-900/95 backdrop-blur-md border border-pink-200 dark:border-amber-500/25 rounded-2xl shadow-xl py-1.5 z-30 max-h-60 overflow-y-auto animate-slide-up">
-                          {(editingCCGroupMonth ? ['Felipe', 'Thaís', 'Felipe / Thaís'] : ['Felipe', 'Thaís']).map(p => {
+                          {(editingCCGroupMonth ? ['Lucas', 'Carol', 'Lucas / Carol'] : ['Lucas', 'Carol']).map(p => {
                             const isSelected = p === formQuemPagou
                             return (
                               <button
@@ -4582,7 +4475,7 @@ export default function App() {
                 </div>
                 <div>
                   <h3 className="font-bold text-base">Transferência entre Contas</h3>
-                  <p className="text-[10px] text-pink-200/90 dark:text-slate-400">Ajuste o saldo do Felipe e da Thaís</p>
+                  <p className="text-[10px] text-pink-200/90 dark:text-slate-400">Ajuste o saldo do Lucas e da Carol</p>
                 </div>
               </div>
               <button
@@ -4621,7 +4514,7 @@ export default function App() {
                           onClick={() => setIsFormTransferDeDropdownOpen(false)}
                         />
                         <div className="absolute left-0 mt-2 w-full bg-pink-50/95 dark:bg-slate-900/95 backdrop-blur-md border border-pink-200 dark:border-amber-500/25 rounded-2xl shadow-xl py-1.5 z-30 max-h-60 overflow-y-auto animate-slide-up">
-                          {['Felipe', 'Thaís'].map(p => {
+                          {['Lucas', 'Carol'].map(p => {
                             const isSelected = p === formTransferDe
                             return (
                               <button
@@ -4629,7 +4522,7 @@ export default function App() {
                                 type="button"
                                 onClick={() => {
                                   setFormTransferDe(p)
-                                  setFormTransferPara(p === 'Felipe' ? 'Thaís' : 'Felipe')
+                                  setFormTransferPara(p === 'Lucas' ? 'Carol' : 'Lucas')
                                   setIsFormTransferDeDropdownOpen(false)
                                 }}
                                 className={`w-full text-left px-4 py-2 text-sm font-semibold transition-colors cursor-pointer ${isSelected
@@ -4756,7 +4649,7 @@ export default function App() {
                 </div>
                 <div>
                   <h3 className="font-bold text-base">Fatura de {formatCCModalMonthName(ccModalMonth)}</h3>
-                  <p className="text-[10px] text-pink-200/90 dark:text-slate-400">Compras no Cartão de Crédito (Compartilhado Felipe / Thaís)</p>
+                  <p className="text-[10px] text-pink-200/90 dark:text-slate-400">Compras no Cartão de Crédito (Compartilhado Lucas / Carol)</p>
                 </div>
               </div>
               <button
@@ -4902,7 +4795,7 @@ export default function App() {
                   <div className="md:col-span-2 space-y-1">
                     <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">Quem Pagou</label>
                     <div className="flex bg-pink-100/60 dark:bg-slate-800 p-0.5 rounded-xl border border-pink-200 dark:border-slate-700">
-                      {['Felipe', 'Thaís'].map(p => (
+                      {['Lucas', 'Carol'].map(p => (
                         <button
                           key={p}
                           type="button"
@@ -5069,8 +4962,8 @@ export default function App() {
                                     onChange={(e) => setEditCCQuemPagou(e.target.value)}
                                     className="w-full bg-pink-50 dark:bg-slate-800 border border-pink-200 dark:border-slate-700 rounded-lg py-1 px-2 text-[11px] text-pink-900 dark:text-slate-200 font-bold outline-none cursor-pointer"
                                   >
-                                    <option value="Felipe">Felipe</option>
-                                    <option value="Thaís">Thaís</option>
+                                    <option value="Lucas">Lucas</option>
+                                    <option value="Carol">Carol</option>
                                   </select>
                                 </td>
 
@@ -5131,11 +5024,11 @@ export default function App() {
                               </td>
                               {/* Quem */}
                               <td className="p-3 whitespace-nowrap">
-                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${item.quem_pagou === 'Felipe'
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${item.quem_pagou === 'Lucas'
                                   ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
                                   : 'bg-pink-50 text-pink-700 dark:bg-pink-950/40 dark:text-pink-300'
                                   }`}>
-                                  <span className={`h-1.5 w-1.5 rounded-full ${item.quem_pagou === 'Felipe' ? 'bg-amber-500' : 'bg-pink-500'}`}></span>
+                                  <span className={`h-1.5 w-1.5 rounded-full ${item.quem_pagou === 'Lucas' ? 'bg-amber-500' : 'bg-pink-500'}`}></span>
                                   {item.quem_pagou}
                                 </span>
                               </td>
